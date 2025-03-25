@@ -1,0 +1,199 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Client model for storing therapy clients
+model Client {
+  id                String         @id @default(uuid())
+  firstName         String
+  lastName          String
+  email             String?        @unique
+  phone             String?
+  address           String?
+  dateOfBirth       DateTime?
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  // Relationships
+  learners          Learner[]
+  appointments      Appointment[]
+  communications    Communication[]
+  waitlistEntries   WaitlistEntry[]
+}
+
+// Learner model for storing information about students/patients
+model Learner {
+  id                String         @id @default(uuid())
+  firstName         String
+  lastName          String
+  dateOfBirth       DateTime?
+  course            String?
+  schedule          String?        // Weekly schedule information
+  status            LearnerStatus  @default(ACTIVE)
+  startDate         DateTime?
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  // Relationships
+  clientId          String
+  client            Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  appointments      Appointment[]
+  attendanceRecords AttendanceRecord[]
+}
+
+// Appointment model for scheduling
+model Appointment {
+  id                String             @id @default(uuid())
+  title             String
+  startTime         DateTime
+  endTime           DateTime
+  status            AppointmentStatus  @default(PENDING)
+  notes             String?
+  location          String?
+  reminderSent      Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  // Relationships
+  clientId          String
+  client            Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  learnerId         String?
+  learner           Learner?           @relation(fields: [learnerId], references: [id], onDelete: SetNull)
+  attendanceRecord  AttendanceRecord?
+  statusHistory     StatusHistory[]
+}
+
+// Status history for tracking changes
+model StatusHistory {
+  id                String             @id @default(uuid())
+  previousStatus    AppointmentStatus?
+  newStatus         AppointmentStatus
+  changedAt         DateTime           @default(now())
+  notes             String?
+  
+  // Relationships
+  appointmentId     String
+  appointment       Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+}
+
+// Attendance tracking
+model AttendanceRecord {
+  id                String             @id @default(uuid())
+  status            AttendanceStatus   @default(PRESENT)
+  notes             String?
+  recordedAt        DateTime           @default(now())
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  // Relationships
+  appointmentId     String             @unique
+  appointment       Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  learnerId         String
+  learner           Learner            @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+}
+
+// Waitlist for prospective clients/learners
+model WaitlistEntry {
+  id                String           @id @default(uuid())
+  priority          WaitlistPriority @default(MEDIUM)
+  requestedService  String?
+  notes             String?
+  status            WaitlistStatus   @default(WAITING)
+  followUpDate      DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  // Relationships
+  clientId          String
+  client            Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+// Communication logs with clients/guardians
+model Communication {
+  id                String              @id @default(uuid())
+  type              CommunicationType   @default(EMAIL)
+  subject           String?
+  content           String
+  sentAt            DateTime            @default(now())
+  status            CommunicationStatus @default(SENT)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relationships
+  clientId          String
+  client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+// Communication templates for reusable messages
+model CommunicationTemplate {
+  id                String              @id @default(uuid())
+  name              String              @unique
+  subject           String
+  content           String
+  type              CommunicationType   @default(EMAIL)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+}
+
+// Enums for various statuses
+enum LearnerStatus {
+  ACTIVE
+  INACTIVE
+  GRADUATED
+  ON_HOLD
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+  NO_SHOW
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+  NO_SHOW
+}
+
+enum WaitlistPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum WaitlistStatus {
+  WAITING
+  CONTACTED
+  SCHEDULED
+  REMOVED
+}
+
+enum CommunicationType {
+  EMAIL
+  SMS
+  PHONE
+  IN_PERSON
+  OTHER
+}
+
+enum CommunicationStatus {
+  DRAFT
+  SENT
+  DELIVERED
+  FAILED
+}

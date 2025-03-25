@@ -1,0 +1,570 @@
+# Windsurf Rules
+
+## 1. Code Style & Formatting
+
+### 1.1 Airbnb Style Guide
+- Adhere to the Airbnb JavaScript/TypeScript Style Guide for consistent syntax, imports, and spacing
+- Use **ESLint** and **Prettier** to automatically enforce and format code. Include any NestJS-specific lint rules or overrides as needed
+
+### 1.2 Naming Conventions
+- **React Components**:
+  - **PascalCase** file names (e.g., `UserCard.tsx`)
+  - Export components as **named exports** rather than default exports
+- **Folders & Modules (Front End)**:
+  - Generally **kebab-case** for directory names (`user-profile`, `job-management`)
+  - Utility files in `/lib/` also kebab-case (e.g., `date-utils.ts`) 
+- **NestJS (Back End)**:
+  - **Modules**: e.g., `AuthModule`, `InvoiceModule` (filename `auth.module.ts`, `invoice.module.ts`)
+  - **Services**: e.g., `UserService` (filename `user.service.ts`) 
+  - **Controllers**: e.g., `UserController` (filename `user.controller.ts`)
+  - File names typically in kebab-case, while class names use PascalCase
+- **API Endpoints**:
+  - Use **kebab-case** for all REST API endpoints (e.g., `/api/user-profiles`, `/api/invoice-items`)
+  - For query parameters, use **camelCase** (e.g., `/api/users?sortBy=lastName&filterRole=admin`)
+
+### 1.3 TypeScript
+- Enable **strict** mode (`strict: true`) in `tsconfig.json`
+- Use explicit return types for exported classes, functions, and components
+- Prefer interfaces over types for object definitions when extending/implementing is likely
+- Use enums for fixed sets of related values (e.g., `enum UserRole { ADMIN = 'admin', USER = 'user' }`)
+- Create and use type definitions for all API responses and payloads
+
+## 2. Project Structure & Architecture
+
+We adopt **Next.js 13+ App Router** for the front end and **NestJS** for the back end in a monorepo structure.
+
+### 2.1 Monorepo Layout
+
+```
+/uwho-platform/
+  ├─ /apps/
+  │   ├─ /web/                  # Next.js App Router-based UI (front end)
+  │   │   ├─ /app/              # Next.js /app folder (layouts, routes, etc.)
+  │   │   ├─ /components/       # Shared UI components (presentation-only)
+  │   │   ├─ /contexts/         # React Context providers
+  │   │   ├─ /hooks/            # Custom React Hooks
+  │   │   ├─ /lib/              # Client-side or shared utility logic
+  │   │   ├─ /styles/           # Tailwind & global CSS files
+  │   │   └─ ...other dirs...
+  │   ├─ /backend/              # NestJS application
+  │   │   ├─ /src/
+  │   │   │   ├─ /modules/
+  │   │   │   │   ├─ user/
+  │   │   │   │   │   ├─ user.module.ts
+  │   │   │   │   │   ├─ user.controller.ts
+  │   │   │   │   │   ├─ user.service.ts
+  │   │   │   │   │   └─ dtos/entities, etc.
+  │   │   │   ├─ /common/       # Common utilities, interceptors, guards
+  │   │   │   ├─ app.module.ts
+  │   │   │   ├─ main.ts
+  │   │   │   └─ ...
+  │   │   ├─ /prisma/           # schema.prisma, migrations
+  │   │   └─ package.json
+  ├─ /packages/
+  │   ├─ /ui/                   # Shared UI library (e.g., extracted Shadcn components)
+  │   ├─ /api/                  # (Optional) Shared API clients or microservices 
+  │   ├─ /config/               # Shared configuration like ESLint, TypeScript, etc.
+  │   └─ /db/                   # (Optional) Prisma schema & migrations if separate
+  ├─ package.json
+  ├─ tsconfig.json
+  └─ ...other files...
+```
+
+### 2.2 Front-End: Next.js (App Router)
+- **Server Components by Default**: Convert to client components only where you need state, event handlers, or browser APIs
+- **Data Fetching**: Use [TanStack Query (React Query)](https://tanstack.com/query) for client-side data caching, or Next.js route handlers for server-side logic
+- **Component Structure**:
+  - Follow atomic design principles (atoms, molecules, organisms, templates, pages)
+  - Keep component files under 300 lines; extract larger components into smaller ones
+  - Implement parent-child component relationships with clear prop interfaces
+
+### 2.3 Back-End: NestJS
+- **AppModule** as the root; each feature in its own module (`UserModule`, `InvoiceModule`, etc.)
+- **Controllers** handle routing (e.g., `@Controller('users')`), while **Services** handle business logic
+- Integrate **Prisma** for database queries (in `user.service.ts` or separate classes)
+- **Use Dependency Injection**: Inject services rather than instantiating them directly
+
+## 3. Styling & UI (Front End)
+
+### 3.1 Tailwind CSS
+- Configure in `tailwind.config.js`; keep global styles minimal
+- Leverage utility classes for consistent spacing, colors, layout
+- Define custom theme variables for colors, spacing, etc. in theme extension
+
+### 3.2 Shadcn UI
+- Use Shadcn UI components for a consistent design system
+- If customizing or extending them, store shared components in `/packages/ui/` or in `/web/components`
+- Maintain a component library documentation for the team
+
+### 3.3 Accessibility (a11y)
+- Use semantic HTML elements (`<button>`, `<a>`, `<nav>`, etc.) appropriately
+- Include proper ARIA attributes when necessary 
+- Ensure color contrast meets WCAG 2.1 AA standards (minimum 4.5:1 for normal text)
+- Support keyboard navigation for all interactive elements
+- Test with screen readers periodically
+
+## 4. Data Fetching & Forms (Front End)
+
+### 4.1 TanStack Query (React Query)
+- For all client-side data fetching and mutations
+- Keep query keys consistent, e.g. `['job', jobId]`
+- Implement proper error handling and loading states
+- Set up global query client defaults for retries, caching
+
+### 4.2 React Hook Form
+- Manage form state and submission
+- Combine with **Zod** for validation via `zodResolver`
+- Create reusable form components for common patterns (e.g., address inputs, payment forms)
+
+### 4.3 Zod
+- Define schemas for form validation and shape your data
+- Consider reusing these schemas or NestJS DTO validations to keep front-end and back-end validations aligned
+- Export and share validation schemas between frontend and backend when possible
+
+## 5. State Management & Logic (Front End)
+- **React Context** for global or cross-cutting state (e.g., user session, theme)
+- Keep context minimal; for heavier data logic, rely on React Query or custom hooks
+- Create custom hooks for repeated logic patterns (`useUser`, `useInvoices`, etc.)
+- Consider using Zustand for complex state that doesn't fit the React Query model
+
+## 6. NestJS Backend & Database
+
+### 6.1 Modules
+- Each feature domain in its own module (`UserModule`, `AuthModule`)
+- Shared or cross-cutting logic in `CommonModule` or `/common`
+- Follow Single Responsibility Principle in services and controllers
+
+### 6.2 Prisma
+- Keep `schema.prisma` and migrations in `/prisma/` directory
+- Use [nestjs-prisma](https://github.com/notiz-dev/nestjs-prisma) or a custom provider to inject Prisma client into services
+- Create a transaction helper service for operations that span multiple database calls
+
+### 6.3 Security & Auth
+- Use NestJS Auth Guards (`@UseGuards(JwtAuthGuard)`) and Passport strategies (JWT, Local, etc.)
+- Store secrets in environment variables (`.env`), never commit them
+- Implement rate limiting for authentication endpoints
+- Use CSRF protection for forms and cookie-based authentication
+- Set appropriate secure, httpOnly cookies and proper CORS configuration
+
+### 6.4 DTOs
+- For request validation, use class-validator or Zod with NestJS
+- Keep them in each module directory (e.g., `/user/dtos/create-user.dto.ts`)
+- Create separate DTOs for request input and response output
+
+### 6.5 API Design
+- Follow REST principles for CRUD operations
+- Use proper HTTP status codes (200, 201, 400, 401, 403, 404, 500)
+- Implement consistent error response format
+- Version your API (e.g., `/api/v1/users`) when breaking changes are needed
+- Document APIs with Swagger/OpenAPI using NestJS decorators
+
+### 6.6 Error Handling
+- Create a centralized error handling strategy using NestJS exception filters
+- Log all errors with appropriate logging levels
+- Return consistent error response formats to the client
+- Hide implementation details in production error messages
+
+## 7. Folder & File Naming
+
+### 7.1 Front End
+- **`/app/route/page.tsx`** for server or client components
+- **`/components/UserCard.tsx`** (PascalCase)
+- **`/hooks/useUser.ts`** (camelCase with `use` prefix)
+- Group related components in subdirectories when they grow in number
+
+### 7.2 Back End
+- **`/src/app.module.ts`**: root module
+- **`/src/modules/user/user.module.ts`**: feature module in kebab-case
+- **`/src/modules/user/user.service.ts`**, **`/src/modules/user/user.controller.ts`**
+- Group related entities, DTOs, and interfaces within feature modules
+
+## 8. Testing & Quality
+
+### 8.1 Frontend Testing
+- Use Jest or Vitest with React Testing Library for unit tests
+- Place test files near components (e.g., `UserCard.test.tsx`)
+- Write tests for critical user flows and complex business logic
+- Aim for minimum 70% code coverage for critical paths
+
+### 8.2 Backend Testing
+- Use Jest for NestJS unit/integration tests
+- Test files can follow the `.spec.ts` or `.test.ts` convention (e.g., `user.service.spec.ts`)
+- Use test databases for integration tests, not production databases
+- Mock external services and databases when appropriate
+
+### 8.3 End-to-End Testing
+- Consider Cypress or Playwright for integrated tests across front-end + back-end flows
+- Implement key user journeys as E2E tests
+- Run E2E tests in CI/CD pipeline for critical paths
+
+### 8.4 Linting & Formatting
+- **ESLint + Prettier** in CI. No merges if lint/format fails
+- Set up pre-commit hooks with Husky and lint-staged
+- Add custom rules for project-specific conventions
+
+### 8.5 Code Reviews
+- Require at least one approval before merging
+- Use pull request templates with checklists for common issues
+- Focus on maintainability, readability, and potential bugs
+
+## 9. Environment Variables & Config
+
+### 9.1 .env Files
+- `.env.local` or `.env` in `/apps/web` for front-end environment (only non-secret)
+- `.env` in `/apps/backend` for secrets like DB connection, JWT keys
+- Keep `.env.example` for placeholders, never commit real secrets
+- Use separate `.env` files for different environments (`.env.development`, `.env.test`, `.env.production`)
+
+### 9.2 Runtime Configuration
+- In Next.js, keep secrets server-side only (server components or route handlers)
+- For NestJS, read from `process.env` via a config module or library
+- Validate environment variables at startup to fail fast if required variables are missing
+
+## 10. Additional Considerations
+
+### 10.1 Documentation
+- Provide a top-level `README.md` or docs folder explaining how to install, run migrations, and start both front-end and back-end
+- Document environment variables, scripts, and architectural decisions
+- Include diagrams for complex workflows and data models
+- Add comments for complex logic (why, not what)
+
+### 10.2 CI/CD
+- Use GitHub Actions or similar to run tests, lint, and build
+- Automate deployment:
+  - **Front End** → Vercel or Netlify
+  - **NestJS** → AWS, DigitalOcean, or any container-based deployment
+- Implement branch protection rules for main/production branches
+
+### 10.3 Performance & Scalability
+- NestJS can use **Fastify** under the hood instead of Express if you need higher concurrency
+- For front-end, consider Next.js features like [Incremental Static Regeneration (ISR)](https://nextjs.org/docs/pages/building-your-application/data-fetching/incremental-static-regeneration) or serverless route handlers
+- Implement caching strategies for frequently accessed data
+- Use pagination for large data sets
+- Optimize assets (images, JS, CSS) for production builds
+
+### 10.4 Future AI/ML Integration
+- If advanced AI/ML tasks arise (invoice OCR, cost predictions), consider a separate Python microservice
+- Keep NestJS as the main orchestrator, calling external AI endpoints
+- Define clear interfaces for AI service integration
+
+### 10.5 Logging & Monitoring
+- Implement structured logging with context (user ID, request ID)
+- Use appropriate log levels (debug, info, warn, error)
+- Set up error monitoring with Sentry or similar
+- Add health check endpoints for backend services
+
+### 10.6 Internationalization (i18n)
+- Use Next.js internationalization features for multi-language support
+- Keep translations in separate files organized by language code
+- Use ICU message format for complex pluralization/formatting
+- Consider right-to-left (RTL) support in UI components
+
+### 10.7 Git Workflow
+- Follow the GitHub Flow or GitFlow branching model
+- Use consistent branch naming (feature/, bugfix/, hotfix/)
+- Write descriptive commit messages with conventional commits format
+- Squash commits before merging to maintain a clean history
+
+## 11. Database Standards & PostgreSQL
+
+### 11.1 Naming Conventions & Structure
+- **Tables**: Use **snake_case** for table names (e.g., `user_profiles`, `purchase_orders`)
+- **Columns**: Also **snake_case** for columns (e.g., `created_at`, `updated_by`)
+- **Primary Keys**: Prefer `BIGSERIAL` (or `SERIAL` if space isn't a concern) for surrogate keys named `id`
+- **Foreign Keys**: Use references with `_id` suffix (e.g., `user_id`, `job_id`)
+- **Constraints**: Keep check constraints, uniqueness, and referential integrity well-defined (e.g., `UNIQUE(email)`, `CHECK (quantity >= 0)`)
+- **Views**: Prefix view names with `v_` to distinguish them from tables (e.g., `v_active_users`)
+
+### 11.2 Schema Organization
+- Keep everything in a single schema (`public`) for smaller apps, or multiple schemas for large projects with clear domain boundaries
+- If you must separate domains (e.g., "auth" vs. "billing"), use distinct schemas with consistent naming: `auth.user`, `billing.invoice`
+- Consider a separate `audit` schema for audit tables if implementing custom audit logging
+
+### 11.3 Audit Columns
+- **Standard Columns**:
+  1. `created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()`
+  2. `updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()`
+  3. `created_by BIGINT` referencing a `users(id)` or similar
+  4. `updated_by BIGINT` referencing a `users(id)` or similar
+- **Update Triggers**: Consider a `BEFORE UPDATE` trigger to automatically set `updated_at = now()` (and `updated_by` if your app tracks the current user ID in the DB layer)
+- For **soft deletes**, add `deleted_at` and/or `deleted_by` columns if your application requires historical data retention
+
+### 11.4 Role-Based Access Control (RBAC)
+- **Postgres Roles**:
+  - **app_user**: Standard application user with minimal permissions (SELECT/INSERT/UPDATE/DELETE on specific tables)
+  - **app_admin**: Elevated privileges for migrations, schema changes (but not superuser)
+  - **read_only**: Optional role if you need read-only connections (e.g., for analytics or reporting)
+- **Least Privilege**:
+  - Only grant each role the permissions it needs (e.g., `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES ... TO app_user`)
+  - For advanced security, combine row-level security (RLS) with policies that filter data by user ID or tenant
+
+### 11.5 Avoiding Duplication
+- **Existing Structures**:
+  - Before creating new tables or columns, **check existing** ones for potential overlap
+  - Maintain an **ER diagram** or schema documentation so new additions don't recreate columns or tables with overlapping meanings
+- **Uniqueness & Normalization**:
+  - Use unique indexes or constraints where appropriate (e.g., `UNIQUE(email)` for user emails)
+  - Normalize data to avoid storing repeated info (3NF or a pragmatic approach)
+- **Common Tables**:
+  - Create reusable lookup tables for common entities like status types, categories, etc.
+
+### 11.6 Lookup Tables & Address Data
+- **Country/State/City**:
+  - If you need standardized US/Canada addresses, consider dedicated tables like `countries`, `states`, `cities` with official codes and names
+  - For US states, store official abbreviations (e.g., `CA` for California). For Canadian provinces, e.g. `NS` for Nova Scotia
+- **Address Columns**:
+  - A typical address structure: `address_line1`, `address_line2`, `city`, `region` (state/province), `postal_code`, `country`
+  - Validate postal codes or rely on your application/AI layer to confirm validity
+- **Consistency**:
+  - Always store addresses in a standardized format, ensuring the region code matches the `countries` or `states` table if referencing them
+
+### 11.7 Data Types & Performance
+- Use `NUMERIC(12,2)` or `MONEY` for currency values if you handle billing amounts. `NUMERIC` is often safer to avoid locale formatting issues
+- For large text fields, use `TEXT`; for short strings (e.g., state codes), use `VARCHAR(2)`
+- Index frequently queried columns (especially foreign keys, email columns, etc.)
+- Consider partial indexes or advanced features (GIN indexes for JSONB fields) if needed
+- Use appropriate types for UUID fields (`uuid` type rather than `VARCHAR`)
+- Store dates and times with timezone awareness when relevant (`TIMESTAMP WITH TIME ZONE`)
+
+### 11.8 Migrations & Versioning
+- **Prisma**: Use `prisma migrate` to create incremental migrations in your `/prisma/migrations` folder
+- **Change Review**:
+  - Always review auto-generated migrations for duplicates or unintended column renames—**especially** if AI tools generate them
+  - Merge or remove extraneous migrations so your history is clean and consistent
+- **Database Version Control**:
+  - Track schema changes in version control
+  - Test migrations on staging before applying to production
+  - Plan for rollback procedures for critical migrations
+
+### 11.9 Additional PostgreSQL Best Practices
+- **Use Transactions**: Wrap multi-step write operations in transactions to maintain consistency
+- **Connection Pooling**: Rely on a pool manager (e.g., `pg-pool`) or Prisma's built-in pooling config
+- **Backup & Restore**: Set up scheduled backups. For production, regularly verify restore procedures
+- **Monitoring**: Keep an eye on logs (`pg_stat_statements`) for slow queries or potential indexes you might need
+- **Query Optimization**:
+  - Use `EXPLAIN ANALYZE` to identify slow queries
+  - Create indexes for frequently filtered and sorted columns
+  - Consider materialized views for complex, frequently-accessed reports# Professional Application Standards
+
+## 12. UI/UX Architecture Guidelines
+
+### 12.1 Page Structure & Navigation
+- **Header Component**:
+  - Consistent header across all pages with:
+    - Logo positioning (left-aligned) linking to home
+    - Primary navigation links
+    - User profile dropdown with avatar (top-right)
+    - Quick action buttons appropriate for user role
+  - Implement responsive collapse for mobile view
+- **Footer Component**:
+  - Legal links (Privacy Policy, Terms of Service)
+  - Copyright information
+  - Contact or support links
+- **Navigation**:
+  - Left sidebar for primary navigation (collapsible)
+  - Group navigation items logically
+  - Breadcrumbs for deep navigation paths
+  - Persistent "back" button for multi-step forms
+- **Responsive Behavior**:
+  - Desktop-first design with mobile adaptations
+  - Breakpoints aligned with standard frameworks (sm, md, lg, xl, 2xl)
+  - Critical actions accessible on all screen sizes
+
+### 12.2 Design System Extensions
+- **Component Library**:
+  - Extend existing UI libraries with custom components
+  - Maintain a component showcase or documentation for developers
+- **Dark Mode Support**:
+  - Implement with persistent user preference
+  - Ensure all components support dark mode variants
+- **Loading States**:
+  - Consistent indicators (spinners, skeletons)
+  - Apply loading states using appropriate UI strategies
+- **Consistency**:
+  - Follow defined spacing and color systems
+  - Semantic use of primary and destructive actions
+
+## 13. Authentication & Security Framework
+
+### 13.1 Authentication Architecture
+- **Login Flow**:
+  - Standard email/username and password authentication
+  - "Remember me" option with secure handling
+  - Account lockout after multiple failed attempts
+  - Clear error messaging for failed login
+- **Password Management**:
+  - Strong password enforcement (minimum length, complexity)
+  - Secure password reset with time-limited tokens
+  - Periodic password update reminders for privileged accounts
+- **Multi-Factor Authentication (MFA)**:
+  - Optional MFA via authenticator apps
+  - Mandatory for admin-level accounts
+  - Backup recovery codes
+
+### 13.2 Role-Based Access Control (RBAC)
+- **Roles**:
+  - Define core roles with specific permissions
+  - Role-based feature visibility and access control
+- **Implementation**:
+  - Frontend route protection
+  - Backend enforcement with appropriate guards and middleware
+
+### 13.3 Session Management
+- **Token Strategy**:
+  - Short-lived access tokens with refresh tokens
+  - Store refresh tokens securely
+  - Token rotation and sliding expiration
+- **Session Monitoring**:
+  - Track and allow users to manage active sessions
+  - Terminate sessions on password changes
+- **Idle Detection**:
+  - Auto logout after inactivity with warning dialogs
+
+### 13.4 Security Measures
+- **API Security**:
+  - Rate limiting on sensitive endpoints
+  - CORS configuration with whitelisted origins
+  - Input validation and sanitization
+  - Parameter tampering prevention
+- **Data Protection**:
+  - Encrypt sensitive data at rest and in transit
+  - Mask sensitive information in logs and UI
+- **Audit Trail**:
+  - Log authentication events and critical data changes
+
+## 14. User Profile & Management
+
+### 14.1 User Profile
+- **Profile Information**:
+  - Basic fields: name, email, phone, profile picture
+  - Preferences: notifications, language, accessibility
+- **Profile Management**:
+  - Self-service updates for non-sensitive fields
+  - Approval workflow for critical updates
+  - Profile completeness indicator
+
+### 14.2 User Administration
+- **User Management**:
+  - Admin portal for user creation and management
+  - Batch operations support
+  - Filtering and searching capabilities
+  - User audit history
+- **User Lifecycle**:
+  - Invitation-based onboarding
+  - Suspension and deletion workflows
+  - Automated deactivation for prolonged inactivity
+  - Data archiving policies
+
+## 15. Notification System
+
+### 15.1 Notification Architecture
+- **Notification Types**:
+  - System alerts
+  - User-specific notifications
+  - Administrative alerts
+- **Delivery Channels**:
+  - In-app notifications
+  - Email notifications
+  - Optional SMS for critical alerts
+- **Notification Management**:
+  - User-configurable preferences
+  - Do-not-disturb options
+  - Compliance with communication regulations
+
+### 15.2 Implementation
+- **Technical Setup**:
+  - Event-based architecture
+  - Real-time delivery using sockets or polling
+- **Templates**:
+  - Standardized notification templates
+  - Localization and accessibility support
+
+## 16. Compliance & Privacy Framework
+
+### 16.1 Accessibility Compliance
+- **Standards**:
+  - Keyboard navigation for interactive elements
+  - Screen reader compatibility
+  - Sufficient color contrast
+  - Visible focus indicators
+  - Alternative text for media
+- **Testing & Validation**:
+  - Automated accessibility tests
+  - Manual verification of key flows
+
+### 16.2 Data Privacy
+- **Consent Management**:
+  - Clear consent options for data use
+  - Revocable consent with clear interfaces
+  - Consent audit logs
+- **Data Retention**:
+  - Defined data retention policies
+  - Automated purging based on rules
+  - Exception handling for legal obligations
+
+## 17. Monitoring & Error Handling
+
+### 17.1 Application Monitoring
+- **Metrics**:
+  - Server response times and throughput
+  - Client-side performance metrics
+  - Database query monitoring
+- **Error Tracking**:
+  - Centralized error reporting
+  - Categorization and prioritization of issues
+- **Availability Monitoring**:
+  - Health checks for services
+  - Synthetic user journey monitoring
+
+### 17.2 Logging Strategy
+- **Log Levels**:
+  - ERROR, WARN, INFO, DEBUG
+- **Log Structure**:
+  - Standard JSON format
+  - Include timestamps, levels, service, and contextual data
+- **Log Management**:
+  - Centralized logging solutions
+  - Defined log retention periods
+  - PII/PHI redaction in logs
+
+### 17.3 Error Handling
+- **User-Facing Errors**:
+  - Friendly and actionable messages
+  - Hide technical details in production
+- **API Error Handling**:
+  - Consistent error response formats
+  - Appropriate HTTP status codes
+- **Recovery**:
+  - Automated retries with backoff
+  - Failover mechanisms for critical components
+
+## 18. Performance Optimization
+
+### 18.1 Front-End Performance
+- **Code Optimization**:
+  - Code splitting and tree-shaking
+  - Lazy loading for non-essential components
+- **Asset Optimization**:
+  - Optimized images and fonts
+  - Use SVG icons and sprites
+- **Caching**:
+  - Service worker support for offline functionality
+  - CDN usage for static assets
+
+### 18.2 API Performance
+- **Query Optimization**:
+  - Limit data to necessary fields
+  - Pagination and filtering support
+- **Caching**:
+  - Use of cache layers
+  - Cache invalidation strategies
+- **Batch Operations**:
+  - Bulk data handling and transactional consistency
+
+### 18.3 Database Optimization
+- **Indexing**:
+  - Index frequently queried fields
+  - Regular analysis of query patterns
+- **Query Optimization**:
+  - Prevent N+1 issues
+  - Leverage connection pooling
