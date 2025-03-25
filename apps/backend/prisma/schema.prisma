@@ -30,7 +30,7 @@ model Client {
   waitlistEntries   WaitlistEntry[]
 }
 
-// Learner model for storing information about students/patients
+// Learner model for storing information about students/learners
 model Learner {
   id                String         @id @default(uuid())
   firstName         String

@@ -94,9 +94,9 @@ export const getFeatureFlags = async (): Promise<FeatureFlag[]> => {
         description: 'Enable telehealth integration',
       },
       {
-        name: 'beta_patient_portal',
+        name: 'beta_client_portal',
         enabled: getCurrentEnvironment() === Environment.DEVELOPMENT,
-        description: 'Enable beta patient portal features',
+        description: 'Enable beta client portal features',
         rolloutPercentage: 50,
       },
     ];
