@@ -10,190 +10,233 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Client model for storing therapy clients
-model Client {
-  id                String         @id @default(uuid())
-  firstName         String
-  lastName          String
-  email             String?        @unique
-  phone             String?
-  address           String?
-  dateOfBirth       DateTime?
-  notes             String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+// Enums
+enum UserRole {
+  ADMIN
+  THERAPIST
+  STAFF
   
-  // Relationships
-  learners          Learner[]
-  appointments      Appointment[]
-  communications    Communication[]
-  waitlistEntries   WaitlistEntry[]
+  @@map("user_role")
 }
 
-// Learner model for storing information about students/learners
-model Learner {
-  id                String         @id @default(uuid())
-  firstName         String
-  lastName          String
-  dateOfBirth       DateTime?
-  course            String?
-  schedule          String?        // Weekly schedule information
-  status            LearnerStatus  @default(ACTIVE)
-  startDate         DateTime?
-  notes             String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+  WAITLIST
   
-  // Relationships
-  clientId          String
-  client            Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  appointments      Appointment[]
-  attendanceRecords AttendanceRecord[]
+  @@map("client_status")
 }
 
-// Appointment model for scheduling
-model Appointment {
-  id                String             @id @default(uuid())
-  title             String
-  startTime         DateTime
-  endTime           DateTime
-  status            AppointmentStatus  @default(PENDING)
-  notes             String?
-  location          String?
-  reminderSent      Boolean            @default(false)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  
-  // Relationships
-  clientId          String
-  client            Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  learnerId         String?
-  learner           Learner?           @relation(fields: [learnerId], references: [id], onDelete: SetNull)
-  attendanceRecord  AttendanceRecord?
-  statusHistory     StatusHistory[]
-}
-
-// Status history for tracking changes
-model StatusHistory {
-  id                String             @id @default(uuid())
-  previousStatus    AppointmentStatus?
-  newStatus         AppointmentStatus
-  changedAt         DateTime           @default(now())
-  notes             String?
-  
-  // Relationships
-  appointmentId     String
-  appointment       Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-}
-
-// Attendance tracking
-model AttendanceRecord {
-  id                String             @id @default(uuid())
-  status            AttendanceStatus   @default(PRESENT)
-  notes             String?
-  recordedAt        DateTime           @default(now())
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  
-  // Relationships
-  appointmentId     String             @unique
-  appointment       Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  learnerId         String
-  learner           Learner            @relation(fields: [learnerId], references: [id], onDelete: Cascade)
-}
-
-// Waitlist for prospective clients/learners
-model WaitlistEntry {
-  id                String           @id @default(uuid())
-  priority          WaitlistPriority @default(MEDIUM)
-  requestedService  String?
-  notes             String?
-  status            WaitlistStatus   @default(WAITING)
-  followUpDate      DateTime?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  
-  // Relationships
-  clientId          String
-  client            Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-}
-
-// Communication logs with clients/guardians
-model Communication {
-  id                String              @id @default(uuid())
-  type              CommunicationType   @default(EMAIL)
-  subject           String?
-  content           String
-  sentAt            DateTime            @default(now())
-  status            CommunicationStatus @default(SENT)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  
-  // Relationships
-  clientId          String
-  client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
-}
-
-// Communication templates for reusable messages
-model CommunicationTemplate {
-  id                String              @id @default(uuid())
-  name              String              @unique
-  subject           String
-  content           String
-  type              CommunicationType   @default(EMAIL)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-}
-
-// Enums for various statuses
 enum LearnerStatus {
   ACTIVE
   INACTIVE
-  GRADUATED
-  ON_HOLD
+  ONHOLD
+  COMPLETED
+  
+  @@map("learner_status")
 }
 
 enum AppointmentStatus {
-  PENDING
+  SCHEDULED
   CONFIRMED
   COMPLETED
   CANCELLED
-  RESCHEDULED
-  NO_SHOW
+  NOSHOW
+  
+  @@map("appointment_status")
 }
 
-enum AttendanceStatus {
-  PRESENT
-  ABSENT
-  LATE
-  EXCUSED
-  NO_SHOW
-}
-
-enum WaitlistPriority {
+enum Priority {
   HIGH
   MEDIUM
   LOW
+  
+  @@map("priority")
+}
+
+enum CommunicationType {
+  EMAIL
+  PHONE
+  INPERSON
+  VIDEO
+  SMS
+  
+  @@map("communication_type")
+}
+
+enum ServiceType {
+  SPEECH_THERAPY
+  OCCUPATIONAL_THERAPY
+  PHYSICAL_THERAPY
+  BEHAVIORAL_THERAPY
+  
+  @@map("service_type")
 }
 
 enum WaitlistStatus {
   WAITING
   CONTACTED
   SCHEDULED
-  REMOVED
+  CANCELLED
+  
+  @@map("waitlist_status")
 }
 
-enum CommunicationType {
-  EMAIL
-  SMS
-  PHONE
-  IN_PERSON
-  OTHER
+// Models
+model User {
+  id                BigInt              @id @default(autoincrement())
+  email             String              @unique
+  password          String
+  firstName         String              @map("first_name")
+  lastName          String              @map("last_name")
+  phone             String?
+  role              UserRole            @default(THERAPIST)
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         BigInt?             @map("created_by")
+  updatedBy         BigInt?             @map("updated_by")
+  createdByUser     User?               @relation("UserCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser     User?               @relation("UserUpdatedBy", fields: [updatedBy], references: [id])
+  createdUsers      User[]              @relation("UserCreatedBy")
+  updatedUsers      User[]              @relation("UserUpdatedBy")
+  clients           Client[]            @relation("TherapistToClient")
+  learners          Learner[]           @relation("InstructorToLearner")
+  appointments      Appointment[]
+  sentCommunications Communication[]    @relation("UserToCommunication")
+  createdClients    Client[]            @relation("ClientCreatedBy")
+  updatedClients    Client[]            @relation("ClientUpdatedBy")
+  createdLearners   Learner[]           @relation("LearnerCreatedBy")
+  updatedLearners   Learner[]           @relation("LearnerUpdatedBy")
+  createdAppointments Appointment[]    @relation("AppointmentCreatedBy")
+  updatedAppointments Appointment[]    @relation("AppointmentUpdatedBy")
+  createdCommunications Communication[] @relation("CommunicationCreatedBy")
+  updatedCommunications Communication[] @relation("CommunicationUpdatedBy")
+  createdWaitlists  Waitlist[]         @relation("WaitlistCreatedBy")
+  updatedWaitlists  Waitlist[]         @relation("WaitlistUpdatedBy")
+  
+  @@map("users")
 }
 
-enum CommunicationStatus {
-  DRAFT
-  SENT
-  DELIVERED
-  FAILED
+model Client {
+  id                BigInt              @id @default(autoincrement())
+  firstName         String              @map("first_name")
+  lastName          String              @map("last_name")
+  email             String?             @unique
+  phone             String
+  address           String?
+  status            ClientStatus        @default(ACTIVE)
+  priority          Priority            @default(MEDIUM)
+  notes             String?
+  therapistId       BigInt?             @map("therapist_id")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         BigInt?             @map("created_by")
+  updatedBy         BigInt?             @map("updated_by")
+  therapist         User?               @relation("TherapistToClient", fields: [therapistId], references: [id])
+  createdByUser     User?               @relation("ClientCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser     User?               @relation("ClientUpdatedBy", fields: [updatedBy], references: [id])
+  learners          Learner[]
+  appointments      Appointment[]
+  communications    Communication[]     @relation("ClientToCommunication")
+  waitlist          Waitlist?
+  
+  @@map("clients")
+}
+
+model Learner {
+  id                BigInt              @id @default(autoincrement())
+  firstName         String              @map("first_name")
+  lastName          String              @map("last_name")
+  dateOfBirth       DateTime?           @map("date_of_birth")
+  gender            String?
+  course            String?
+  schedule          String?
+  status            LearnerStatus       @default(ACTIVE)
+  notes             String?
+  clientId          BigInt              @map("client_id")
+  instructorId      BigInt?             @map("instructor_id")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         BigInt?             @map("created_by")
+  updatedBy         BigInt?             @map("updated_by")
+  client            Client              @relation(fields: [clientId], references: [id])
+  instructor        User?               @relation("InstructorToLearner", fields: [instructorId], references: [id])
+  createdByUser     User?               @relation("LearnerCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser     User?               @relation("LearnerUpdatedBy", fields: [updatedBy], references: [id])
+  appointments      Appointment[]
+  communications    Communication[]     @relation("LearnerToCommunication")
+  
+  @@map("learners")
+}
+
+model Appointment {
+  id                BigInt              @id @default(autoincrement())
+  title             String
+  startTime         DateTime            @map("start_time")
+  endTime           DateTime            @map("end_time")
+  status            AppointmentStatus   @default(SCHEDULED)
+  location          String?
+  notes             String?
+  clientId          BigInt              @map("client_id")
+  learnerId         BigInt?             @map("learner_id")
+  therapistId       BigInt              @map("therapist_id")
+  cancellationReason String?           @map("cancellation_reason")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         BigInt?             @map("created_by")
+  updatedBy         BigInt?             @map("updated_by")
+  client            Client              @relation(fields: [clientId], references: [id])
+  learner           Learner?            @relation(fields: [learnerId], references: [id])
+  therapist         User                @relation(fields: [therapistId], references: [id])
+  createdByUser     User?               @relation("AppointmentCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser     User?               @relation("AppointmentUpdatedBy", fields: [updatedBy], references: [id])
+  communications    Communication[]     @relation("AppointmentToCommunication")
+  
+  @@map("appointments")
+}
+
+model Communication {
+  id                BigInt              @id @default(autoincrement())
+  type              CommunicationType
+  subject           String
+  content           String
+  sentAt            DateTime            @default(now()) @map("sent_at")
+  notes             String?
+  clientId          BigInt              @map("client_id")
+  learnerId         BigInt?             @map("learner_id")
+  appointmentId     BigInt?             @map("appointment_id")
+  userId            BigInt?             @map("user_id")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime?           @updatedAt @map("updated_at")
+  createdBy         BigInt?             @map("created_by")
+  updatedBy         BigInt?             @map("updated_by")
+  client            Client              @relation("ClientToCommunication", fields: [clientId], references: [id])
+  learner           Learner?            @relation("LearnerToCommunication", fields: [learnerId], references: [id])
+  appointment       Appointment?        @relation("AppointmentToCommunication", fields: [appointmentId], references: [id])
+  user              User?               @relation("UserToCommunication", fields: [userId], references: [id])
+  createdByUser     User?               @relation("CommunicationCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser     User?               @relation("CommunicationUpdatedBy", fields: [updatedBy], references: [id])
+  
+  @@map("communications")
+}
+
+model Waitlist {
+  id                BigInt              @id @default(autoincrement())
+  serviceType       ServiceType         @map("service_type")
+  status            WaitlistStatus      @default(WAITING)
+  requestDate       DateTime            @map("request_date")
+  preferredSchedule String?             @map("preferred_schedule")
+  notes             String?
+  clientId          BigInt              @unique @map("client_id")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         BigInt?             @map("created_by")
+  updatedBy         BigInt?             @map("updated_by")
+  client            Client              @relation(fields: [clientId], references: [id])
+  createdByUser     User?               @relation("WaitlistCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser     User?               @relation("WaitlistUpdatedBy", fields: [updatedBy], references: [id])
+  
+  @@map("waitlist")
 }

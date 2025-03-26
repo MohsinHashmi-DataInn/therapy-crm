@@ -9,20 +9,25 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "start": "turbo run start",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "devDependencies": {
-    "prettier": "^3.0.0",
-    "turbo": "^1.10.0",
-    "typescript": "^5.1.6"
+    "prettier": "^3.0.3",
+    "turbo": "^1.10.16"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "lucide-react": "^0.483.0"
+    "@nestjs/common": "^11.0.12",
+    "@nestjs/core": "^11.0.12",
+    "@nestjs/platform-express": "^11.0.12",
+    "@nestjs/swagger": "^11.1.0",
+    "@prisma/client": "^6.5.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "reflect-metadata": "^0.2.2"
   }
 }

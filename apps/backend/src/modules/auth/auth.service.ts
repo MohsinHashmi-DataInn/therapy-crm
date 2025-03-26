@@ -1,40 +1,71 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaService } from '../../common/prisma/prisma.service';
+import { UserService } from '../user/user.service';
+import { LoginDto } from './dto/login.dto';
+import * as bcrypt from 'bcrypt';
 
 /**
- * Authentication service
+ * Service handling authentication logic
  */
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly userService: UserService,
     private readonly jwtService: JwtService,
   ) {}
 
   /**
-   * Validate user credentials
-   * @param email User email
-   * @param password User password
-   * @returns User object if valid, null otherwise
+   * Authenticate user and generate JWT token
+   * @param loginDto - Login credentials
+   * @returns Access token and user info
    */
-  async validateUser(email: string, password: string): Promise<any> {
-    // This is a placeholder - in a real app, you would:
-    // 1. Find the user by email
-    // 2. Verify the password using bcrypt
-    // 3. Return user without password if valid
-    return null;
+  async login(loginDto: LoginDto) {
+    // Find user by email
+    const user = await this.userService.findByEmail(loginDto.email);
+    
+    // If user not found or inactive, throw exception
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    
+    // Compare password with stored hash
+    if (!user.password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    
+    const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
+    
+    // If password invalid, throw exception
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    
+    // Generate JWT payload
+    const payload = {
+      sub: user.id.toString(),
+      email: user.email,
+      role: user.role,
+    };
+    
+    // Return token and user info
+    return {
+      accessToken: this.jwtService.sign(payload),
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+      },
+    };
   }
 
   /**
-   * Generate JWT token for authenticated user
-   * @param user User object
-   * @returns Token with user info
+   * Get profile of authenticated user
+   * @param userId - ID of authenticated user
+   * @returns User profile
    */
-  async login(user: any) {
-    const payload = { email: user.email, sub: user.id, role: user.role };
-    return {
-      access_token: this.jwtService.sign(payload),
-    };
+  async getProfile(userId: bigint) {
+    return this.userService.findOne(userId);
   }
 }

@@ -1,39 +1,94 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { 
-  CreateCommunicationDto, 
-  UpdateCommunicationDto,
-  CommunicationTemplateDto
-} from './dto/communication.dto';
-import { CommunicationType, CommunicationStatus } from '@prisma/client';
+import { CreateCommunicationDto } from './dto/create-communication.dto';
+import { UpdateCommunicationDto } from './dto/update-communication.dto';
 
+// Define Communication interface locally to match Prisma schema
+export interface Communication {
+  id: bigint;
+  type: string;
+  subject?: string;
+  content: string;
+  sentAt: Date;
+  deliveryStatus?: string;
+  notes?: string;
+  recipientId: bigint;
+  senderId: bigint;
+  clientId?: bigint;
+  learnerId?: bigint | null;
+  appointmentId?: bigint | null;
+  createdAt: Date;
+  updatedAt?: Date;
+  createdBy?: bigint;
+  updatedBy?: bigint | null;
+}
+
+/**
+ * Service handling communication-related business logic
+ */
 @Injectable()
 export class CommunicationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prismaService: PrismaService) {}
 
   /**
-   * Create a new communication log entry
-   * @param createCommunicationDto - Communication data
-   * @returns Newly created communication
+   * Create a new communication
+   * @param createCommunicationDto - Data for creating the communication
+   * @param userId - ID of the user creating this communication
+   * @returns The created communication
    */
-  async create(createCommunicationDto: CreateCommunicationDto) {
+  async create(createCommunicationDto: CreateCommunicationDto, userId: bigint): Promise<Communication> {
     // Verify client exists
-    const client = await this.prisma.client.findUnique({
-      where: { id: createCommunicationDto.clientId },
+    const client = await this.prismaService.client.findUnique({
+      where: { id: BigInt(createCommunicationDto.clientId) },
     });
 
     if (!client) {
       throw new NotFoundException(`Client with ID ${createCommunicationDto.clientId} not found`);
     }
 
-    return this.prisma.communication.create({
+    // Prepare learner ID if provided
+    let learnerId: bigint | null = null;
+    if (createCommunicationDto.learnerId) {
+      learnerId = BigInt(createCommunicationDto.learnerId);
+      // Verify learner exists
+      const learner = await this.prismaService.learner.findUnique({
+        where: { id: learnerId },
+      });
+
+      if (!learner) {
+        throw new NotFoundException(`Learner with ID ${createCommunicationDto.learnerId} not found`);
+      }
+    }
+
+    // Prepare appointment ID if provided
+    let appointmentId: bigint | null = null;
+    if (createCommunicationDto.appointmentId) {
+      appointmentId = BigInt(createCommunicationDto.appointmentId);
+      // Verify appointment exists
+      const appointment = await this.prismaService.appointment.findUnique({
+        where: { id: appointmentId },
+      });
+
+      if (!appointment) {
+        throw new NotFoundException(`Appointment with ID ${createCommunicationDto.appointmentId} not found`);
+      }
+    }
+
+    // Get sentAt date, default to current date if not provided
+    const sentAt = createCommunicationDto.sentAt ? new Date(createCommunicationDto.sentAt) : new Date();
+
+    // Create the communication
+    const communication = await this.prismaService.communication.create({
       data: {
-        clientId: createCommunicationDto.clientId,
         type: createCommunicationDto.type,
         subject: createCommunicationDto.subject,
         content: createCommunicationDto.content,
-        sentAt: createCommunicationDto.sentAt ? new Date(createCommunicationDto.sentAt) : new Date(),
-        status: createCommunicationDto.status || CommunicationStatus.SENT,
+        sentAt,
+        notes: createCommunicationDto.notes,
+        clientId: BigInt(createCommunicationDto.clientId),
+        learnerId,
+        appointmentId,
+        createdBy: userId,
       },
       include: {
         client: {
@@ -45,65 +100,44 @@ export class CommunicationService {
             phone: true,
           },
         },
+        learner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
-    });
+    }) as unknown as Communication;
+
+    return communication;
   }
 
   /**
-   * Find all communications with optional filtering
-   * @param options - Filter options
-   * @returns List of communications
+   * Find all communications with optional filters
+   * @param clientId - Optional client ID to filter by
+   * @param learnerId - Optional learner ID to filter by
+   * @param type - Optional type to filter by
+   * @returns Array of communications
    */
-  async findAll(options: {
-    type?: CommunicationType;
-    status?: CommunicationStatus;
-    clientId?: string;
-    startDate?: string;
-    endDate?: string;
-    sortBy?: string;
-    sortOrder?: 'asc' | 'desc';
-  }) {
-    const { 
-      type, 
-      status, 
-      clientId, 
-      startDate, 
-      endDate, 
-      sortBy = 'sentAt', 
-      sortOrder = 'desc' 
-    } = options;
-
-    // Build where clause based on provided filters
+  async findAll(clientId?: string, learnerId?: string, type?: string): Promise<Communication[]> {
     const where: any = {};
+
+    // Add filters if provided
+    if (clientId) {
+      where.clientId = BigInt(clientId);
+    }
+
+    if (learnerId) {
+      where.learnerId = BigInt(learnerId);
+    }
 
     if (type) {
       where.type = type;
     }
 
-    if (status) {
-      where.status = status;
-    }
-
-    if (clientId) {
-      where.clientId = clientId;
-    }
-
-    // Handle date range
-    if (startDate || endDate) {
-      where.sentAt = {};
-      
-      if (startDate) {
-        where.sentAt.gte = new Date(startDate);
-      }
-      
-      if (endDate) {
-        where.sentAt.lte = new Date(endDate);
-      }
-    }
-
-    return this.prisma.communication.findMany({
+    const communications = await this.prismaService.communication.findMany({
       where,
-      orderBy: { [sortBy]: sortOrder },
       include: {
         client: {
           select: {
@@ -114,21 +148,48 @@ export class CommunicationService {
             phone: true,
           },
         },
+        learner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
-    });
+      orderBy: {
+        sentAt: 'desc',
+      },
+    }) as unknown as Communication[];
+
+    return communications;
   }
 
   /**
    * Find a communication by ID
    * @param id - Communication ID
-   * @returns Communication with related data
-   * @throws NotFoundException if communication not found
+   * @returns The found communication
    */
-  async findOne(id: string) {
-    const communication = await this.prisma.communication.findUnique({
+  async findOne(id: bigint): Promise<Communication> {
+    const communication = await this.prismaService.communication.findUnique({
       where: { id },
       include: {
-        client: true,
+        client: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+        learner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        appointment: true,
       },
     });
 
@@ -136,21 +197,34 @@ export class CommunicationService {
       throw new NotFoundException(`Communication with ID ${id} not found`);
     }
 
-    return communication;
+    return communication as unknown as Communication;
   }
 
   /**
    * Update a communication
    * @param id - Communication ID
-   * @param updateCommunicationDto - Updated communication data
-   * @returns Updated communication
-   * @throws NotFoundException if communication not found
+   * @param updateCommunicationDto - Data for updating the communication
+   * @param userId - ID of the user updating this communication
+   * @returns The updated communication
    */
-  async update(id: string, updateCommunicationDto: UpdateCommunicationDto) {
-    // If clientId is provided, verify client exists
+  async update(
+    id: bigint,
+    updateCommunicationDto: UpdateCommunicationDto,
+    userId: bigint
+  ): Promise<Communication> {
+    // Verify communication exists
+    await this.findOne(id);
+
+    // Prepare update data
+    const updateData: any = { ...updateCommunicationDto };
+
+    // Handle client ID conversion if provided
     if (updateCommunicationDto.clientId) {
-      const client = await this.prisma.client.findUnique({
-        where: { id: updateCommunicationDto.clientId },
+      updateData.clientId = BigInt(updateCommunicationDto.clientId);
+      
+      // Verify client exists
+      const client = await this.prismaService.client.findUnique({
+        where: { id: updateData.clientId },
       });
 
       if (!client) {
@@ -158,160 +232,100 @@ export class CommunicationService {
       }
     }
 
-    try {
-      return await this.prisma.communication.update({
-        where: { id },
-        data: {
-          type: updateCommunicationDto.type,
-          subject: updateCommunicationDto.subject,
-          content: updateCommunicationDto.content,
-          sentAt: updateCommunicationDto.sentAt 
-            ? new Date(updateCommunicationDto.sentAt) 
-            : undefined,
-          status: updateCommunicationDto.status,
-          clientId: updateCommunicationDto.clientId,
-        },
-        include: {
-          client: true,
-        },
-      });
-    } catch (error) {
-      throw new NotFoundException(`Communication with ID ${id} not found`);
+    // Handle learner ID conversion if provided
+    if (updateCommunicationDto.learnerId !== undefined) {
+      updateData.learnerId = updateCommunicationDto.learnerId 
+        ? BigInt(updateCommunicationDto.learnerId) 
+        : null;
+      
+      if (updateData.learnerId) {
+        // Verify learner exists
+        const learner = await this.prismaService.learner.findUnique({
+          where: { id: updateData.learnerId },
+        });
+
+        if (!learner) {
+          throw new NotFoundException(`Learner with ID ${updateCommunicationDto.learnerId} not found`);
+        }
+      }
     }
+
+    // Handle appointment ID conversion if provided
+    if (updateCommunicationDto.appointmentId !== undefined) {
+      updateData.appointmentId = updateCommunicationDto.appointmentId 
+        ? BigInt(updateCommunicationDto.appointmentId) 
+        : null;
+      
+      if (updateData.appointmentId) {
+        // Verify appointment exists
+        const appointment = await this.prismaService.appointment.findUnique({
+          where: { id: updateData.appointmentId },
+        });
+
+        if (!appointment) {
+          throw new NotFoundException(`Appointment with ID ${updateCommunicationDto.appointmentId} not found`);
+        }
+      }
+    }
+
+    // Handle sentAt date conversion if provided
+    if (updateCommunicationDto.sentAt) {
+      updateData.sentAt = new Date(updateCommunicationDto.sentAt);
+    }
+
+    // Update the communication
+    const updatedCommunication = await this.prismaService.communication.update({
+      where: { id },
+      data: {
+        ...updateData,
+        updatedBy: userId,
+      },
+      include: {
+        client: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+        learner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    }) as unknown as Communication;
+
+    return updatedCommunication;
   }
 
   /**
    * Remove a communication
    * @param id - Communication ID
-   * @returns Removed communication
-   * @throws NotFoundException if communication not found
+   * @returns The removed communication
    */
-  async remove(id: string) {
-    try {
-      return await this.prisma.communication.delete({
-        where: { id },
-      });
-    } catch (error) {
-      throw new NotFoundException(`Communication with ID ${id} not found`);
-    }
-  }
+  async remove(id: bigint): Promise<Communication> {
+    // Verify communication exists
+    await this.findOne(id);
 
-  /**
-   * Find all communications for a specific client
-   * @param clientId - Client ID
-   * @returns List of communications for the client
-   */
-  async findByClient(clientId: string) {
-    // Verify client exists
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-    });
+    // Delete the communication
+    const deletedCommunication = await this.prismaService.communication.delete({
+      where: { id },
+      include: {
+        client: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          }
+        }
+      }
+    }) as unknown as Communication;
 
-    if (!client) {
-      throw new NotFoundException(`Client with ID ${clientId} not found`);
-    }
-
-    return this.prisma.communication.findMany({
-      where: { clientId },
-      orderBy: { sentAt: 'desc' },
-    });
-  }
-
-  /**
-   * Create a new communication template
-   * @param templateDto - Template data
-   * @returns Newly created template
-   */
-  async createTemplate(templateDto: CommunicationTemplateDto) {
-    // Check if template with same name already exists
-    const existingTemplate = await this.prisma.communicationTemplate.findUnique({
-      where: { name: templateDto.name },
-    });
-
-    if (existingTemplate) {
-      throw new BadRequestException(`Template with name ${templateDto.name} already exists`);
-    }
-
-    return this.prisma.communicationTemplate.create({
-      data: {
-        name: templateDto.name,
-        subject: templateDto.subject,
-        content: templateDto.content,
-        type: templateDto.type,
-      },
-    });
-  }
-
-  /**
-   * Get all communication templates
-   * @returns List of communication templates
-   */
-  async getTemplates() {
-    return this.prisma.communicationTemplate.findMany({
-      orderBy: { name: 'asc' },
-    });
-  }
-
-  /**
-   * Get a communication template by name
-   * @param name - Template name
-   * @returns Communication template
-   * @throws NotFoundException if template not found
-   */
-  async getTemplateByName(name: string) {
-    const template = await this.prisma.communicationTemplate.findUnique({
-      where: { name },
-    });
-
-    if (!template) {
-      throw new NotFoundException(`Template with name ${name} not found`);
-    }
-
-    return template;
-  }
-
-  /**
-   * Send a communication using a template
-   * @param clientId - Client ID
-   * @param templateName - Template name
-   * @param replacements - Key-value pairs for template placeholders
-   * @returns Newly created communication
-   */
-  async sendTemplate(
-    clientId: string, 
-    templateName: string, 
-    replacements: Record<string, string>
-  ) {
-    // Verify client exists
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-    });
-
-    if (!client) {
-      throw new NotFoundException(`Client with ID ${clientId} not found`);
-    }
-
-    // Get template
-    const template = await this.getTemplateByName(templateName);
-
-    // Replace placeholders in template content and subject
-    let content = template.content;
-    let subject = template.subject;
-
-    // Process replacements
-    for (const [key, value] of Object.entries(replacements)) {
-      const placeholder = `{{${key}}}`;
-      content = content.replace(new RegExp(placeholder, 'g'), value);
-      subject = subject.replace(new RegExp(placeholder, 'g'), value);
-    }
-
-    // Create communication
-    return this.create({
-      clientId,
-      type: template.type,
-      subject,
-      content,
-      status: CommunicationStatus.SENT,
-    });
+    return deletedCommunication;
   }
 }

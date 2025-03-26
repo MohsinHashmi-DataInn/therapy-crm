@@ -1,112 +1,133 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { CommunicationService } from './communication.service';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Request,
+  Query,
+} from '@nestjs/common';
 import { 
-  CreateCommunicationDto, 
-  UpdateCommunicationDto,
-  CommunicationTemplateDto
-} from './dto/communication.dto';
-import { CommunicationType, CommunicationStatus } from '@prisma/client';
+  ApiTags, 
+  ApiOperation, 
+  ApiResponse, 
+  ApiParam, 
+  ApiBearerAuth, 
+  ApiQuery 
+} from '@nestjs/swagger';
+import { CommunicationService } from './communication.service';
+import { CreateCommunicationDto } from './dto/create-communication.dto';
+import { UpdateCommunicationDto } from './dto/update-communication.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../auth/guards/roles.guard';
 
+// Define request interface
+interface RequestWithUser {
+  user: {
+    id: string;
+    email: string;
+    role: UserRole;
+  };
+}
+
+/**
+ * Controller handling communication-related endpoints
+ */
 @ApiTags('communications')
 @Controller('communications')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class CommunicationController {
   constructor(private readonly communicationService: CommunicationService) {}
 
+  /**
+   * Create a new communication
+   */
   @Post()
-  @ApiOperation({ summary: 'Create a new communication log entry' })
+  @ApiOperation({ summary: 'Create a new communication' })
   @ApiResponse({ status: 201, description: 'Communication successfully created' })
   @ApiResponse({ status: 400, description: 'Bad request' })
-  async create(@Body() createCommunicationDto: CreateCommunicationDto) {
-    return this.communicationService.create(createCommunicationDto);
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Client, learner, or appointment not found' })
+  async create(@Body() createCommunicationDto: CreateCommunicationDto, @Request() req: RequestWithUser) {
+    return this.communicationService.create(createCommunicationDto, BigInt(req.user.id));
   }
 
+  /**
+   * Get all communications with optional filtering
+   */
   @Get()
   @ApiOperation({ summary: 'Get all communications with optional filtering' })
-  @ApiResponse({ status: 200, description: 'Return all communications' })
-  async findAll(
-    @Query('type') type?: CommunicationType,
-    @Query('status') status?: CommunicationStatus,
+  @ApiQuery({ name: 'clientId', required: false, description: 'Filter by client ID' })
+  @ApiQuery({ name: 'learnerId', required: false, description: 'Filter by learner ID' })
+  @ApiQuery({ name: 'type', required: false, description: 'Filter by communication type' })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Filter by start date (ISO format)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'Filter by end date (ISO format)' })
+  @ApiResponse({ status: 200, description: 'Returns all communications matching the filters' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  findAll(
     @Query('clientId') clientId?: string,
+    @Query('learnerId') learnerId?: string,
+    @Query('type') type?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
-    @Query('sortBy') sortBy?: string,
-    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
   ) {
-    return this.communicationService.findAll({
-      type,
-      status,
-      clientId,
-      startDate,
-      endDate,
-      sortBy,
-      sortOrder,
-    });
+    return this.communicationService.findAll(clientId, learnerId, type);
   }
 
+  /**
+   * Get communication by ID
+   */
   @Get(':id')
-  @ApiOperation({ summary: 'Get a communication by id' })
-  @ApiResponse({ status: 200, description: 'Return the communication' })
+  @ApiOperation({ summary: 'Get communication by ID' })
+  @ApiParam({ name: 'id', description: 'Communication ID' })
+  @ApiResponse({ status: 200, description: 'Returns the communication' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Communication not found' })
-  async findOne(@Param('id') id: string) {
-    return this.communicationService.findOne(id);
+  findOne(@Param('id') id: string) {
+    return this.communicationService.findOne(BigInt(id));
   }
 
-  @Put(':id')
+  /**
+   * Update a communication
+   */
+  @Patch(':id')
   @ApiOperation({ summary: 'Update a communication' })
+  @ApiParam({ name: 'id', description: 'Communication ID' })
   @ApiResponse({ status: 200, description: 'Communication successfully updated' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Communication not found' })
-  async update(@Param('id') id: string, @Body() updateCommunicationDto: UpdateCommunicationDto) {
-    return this.communicationService.update(id, updateCommunicationDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateCommunicationDto: UpdateCommunicationDto,
+    @Request() req: RequestWithUser
+  ) {
+    return this.communicationService.update(
+      BigInt(id),
+      updateCommunicationDto,
+      BigInt(req.user.id)
+    );
   }
 
+  /**
+   * Delete a communication
+   */
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a communication' })
+  @ApiParam({ name: 'id', description: 'Communication ID' })
   @ApiResponse({ status: 200, description: 'Communication successfully deleted' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
   @ApiResponse({ status: 404, description: 'Communication not found' })
-  async remove(@Param('id') id: string) {
-    return this.communicationService.remove(id);
-  }
-
-  @Get('client/:clientId')
-  @ApiOperation({ summary: 'Get all communications for a specific client' })
-  @ApiResponse({ status: 200, description: 'Return all communications for the client' })
-  async findByClient(@Param('clientId') clientId: string) {
-    return this.communicationService.findByClient(clientId);
-  }
-
-  @Post('send-template')
-  @ApiOperation({ summary: 'Send a communication using a template' })
-  @ApiResponse({ status: 201, description: 'Communication successfully sent' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  async sendTemplate(
-    @Body('clientId') clientId: string,
-    @Body('templateName') templateName: string,
-    @Body('replacements') replacements: Record<string, string>,
-  ) {
-    return this.communicationService.sendTemplate(clientId, templateName, replacements);
-  }
-
-  @Post('templates')
-  @ApiOperation({ summary: 'Create a new communication template' })
-  @ApiResponse({ status: 201, description: 'Template successfully created' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  async createTemplate(@Body() templateDto: CommunicationTemplateDto) {
-    return this.communicationService.createTemplate(templateDto);
-  }
-
-  @Get('templates')
-  @ApiOperation({ summary: 'Get all communication templates' })
-  @ApiResponse({ status: 200, description: 'Return all templates' })
-  async getTemplates() {
-    return this.communicationService.getTemplates();
-  }
-
-  @Get('templates/:name')
-  @ApiOperation({ summary: 'Get a communication template by name' })
-  @ApiResponse({ status: 200, description: 'Return the template' })
-  @ApiResponse({ status: 404, description: 'Template not found' })
-  async getTemplateByName(@Param('name') name: string) {
-    return this.communicationService.getTemplateByName(name);
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  remove(@Param('id') id: string) {
+    return this.communicationService.remove(BigInt(id));
   }
 }

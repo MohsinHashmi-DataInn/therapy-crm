@@ -1,149 +1,135 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { 
-  CreateAppointmentDto, 
-  UpdateAppointmentDto, 
-  UpdateAppointmentStatusDto,
-  CreateAttendanceRecordDto 
-} from './dto/appointment.dto';
-import { Appointment, AppointmentStatus, AttendanceStatus } from '@prisma/client';
-import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfDay, endOfDay } from 'date-fns';
+import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
+// Define enum and interface locally to match the Prisma schema
+export enum AppointmentStatus {
+  SCHEDULED = 'SCHEDULED',
+  CANCELLED = 'CANCELLED',
+  COMPLETED = 'COMPLETED',
+  NO_SHOW = 'NO_SHOW'
+}
+
+export enum AppointmentType {
+  INITIAL_ASSESSMENT = 'INITIAL_ASSESSMENT',
+  FOLLOW_UP = 'FOLLOW_UP',
+  THERAPY_SESSION = 'THERAPY_SESSION',
+  GROUP_SESSION = 'GROUP_SESSION',
+  OTHER = 'OTHER'
+}
+
+export interface Appointment {
+  id: bigint;
+  startTime: Date;
+  endTime: Date;
+  type: string;
+  status: string;
+  title?: string;
+  notes?: string;
+  location?: string;
+  clientId?: bigint | null;
+  learnerId?: bigint | null;
+  therapistId: bigint;
+  createdAt: Date;
+  updatedAt?: Date | null;
+  createdBy?: bigint | null;
+  updatedBy?: bigint | null;
+  // Include relations for TypeScript purposes
+  client?: any;
+  learner?: any;
+  therapist?: any;
+}
+
+/**
+ * Service handling appointment-related business logic
+ */
 @Injectable()
 export class AppointmentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prismaService: PrismaService) {}
 
   /**
    * Create a new appointment
-   * @param createAppointmentDto - Appointment data
-   * @returns Newly created appointment
+   * @param createAppointmentDto - Data for creating the appointment
+   * @param userId - ID of the user creating this appointment
+   * @returns The created appointment
    */
-  async create(createAppointmentDto: CreateAppointmentDto) {
-    // Verify client exists
-    const client = await this.prisma.client.findUnique({
-      where: { id: createAppointmentDto.clientId },
-    });
+  async create(createAppointmentDto: CreateAppointmentDto, userId: bigint): Promise<Appointment> {
+    // Convert start and end times to Date objects
+    const startTime = new Date(createAppointmentDto.startTime);
+    const endTime = new Date(createAppointmentDto.endTime);
 
-    if (!client) {
-      throw new NotFoundException(`Client with ID ${createAppointmentDto.clientId} not found`);
+    // Validate start and end times
+    this.validateAppointmentTimes(startTime, endTime);
+
+    // Convert IDs to BigInt
+    const therapistId = BigInt(createAppointmentDto.therapistId);
+    let clientId: bigint | null = null;
+    let learnerId: bigint | null = null;
+
+    if (createAppointmentDto.clientId) {
+      clientId = BigInt(createAppointmentDto.clientId);
+      
+      // Verify client exists
+      const client = await this.prismaService.client.findUnique({
+        where: { id: clientId },
+      });
+
+      if (!client) {
+        throw new NotFoundException(`Client with ID ${createAppointmentDto.clientId} not found`);
+      }
     }
 
-    // If learner ID is provided, verify learner exists
     if (createAppointmentDto.learnerId) {
-      const learner = await this.prisma.learner.findUnique({
-        where: { id: createAppointmentDto.learnerId },
-      });
+      learnerId = BigInt(createAppointmentDto.learnerId);
+      
+      // Verify learner exists
+      const learner = await this.prismaService.learner.findUnique({
+        where: { id: learnerId },
+      }) as unknown as { id: bigint; clientId: bigint };
 
       if (!learner) {
         throw new NotFoundException(`Learner with ID ${createAppointmentDto.learnerId} not found`);
       }
 
-      // Verify learner belongs to the client
-      if (learner.clientId !== createAppointmentDto.clientId) {
-        throw new BadRequestException('Learner does not belong to the specified client');
+      // If client ID not provided, get it from learner
+      if (!clientId) {
+        clientId = learner.clientId;
       }
     }
 
-    // Validate appointment times
-    const startTime = new Date(createAppointmentDto.startTime);
-    const endTime = new Date(createAppointmentDto.endTime);
-
-    if (startTime >= endTime) {
-      throw new BadRequestException('End time must be after start time');
-    }
-
-    // Create appointment with initial status history
-    return this.prisma.$transaction(async (prisma) => {
-      const appointment = await prisma.appointment.create({
-        data: {
-          title: createAppointmentDto.title,
-          startTime,
-          endTime,
-          status: createAppointmentDto.status || AppointmentStatus.PENDING,
-          notes: createAppointmentDto.notes,
-          location: createAppointmentDto.location,
-          reminderSent: createAppointmentDto.reminderSent || false,
-          clientId: createAppointmentDto.clientId,
-          learnerId: createAppointmentDto.learnerId,
-        },
-        include: {
-          client: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              phone: true,
-            },
-          },
-          learner: createAppointmentDto.learnerId ? {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              course: true,
-            },
-          } : false,
-        },
-      });
-
-      // Record initial status in history
-      await prisma.statusHistory.create({
-        data: {
-          appointmentId: appointment.id,
-          previousStatus: null,
-          newStatus: appointment.status,
-          notes: 'Initial appointment creation',
-        },
-      });
-
-      return appointment;
+    // Verify therapist exists
+    const therapist = await this.prismaService.user.findUnique({
+      where: { id: therapistId },
     });
-  }
 
-  /**
-   * Find all appointments with optional filtering
-   * @param options - Filter options
-   * @returns List of appointments
-   */
-  async findAll(options: {
-    startDate?: string;
-    endDate?: string;
-    status?: string;
-    clientId?: string;
-    learnerId?: string;
-  }) {
-    const { startDate, endDate, status, clientId, learnerId } = options;
-
-    // Build where clause based on provided filters
-    const where: any = {};
-
-    if (startDate) {
-      where.startTime = { gte: new Date(startDate) };
+    if (!therapist) {
+      throw new NotFoundException(`Therapist with ID ${createAppointmentDto.therapistId} not found`);
     }
 
-    if (endDate) {
-      where.startTime = { 
-        ...(where.startTime || {}),
-        lte: new Date(endDate)
-      };
-    }
+    // Check for therapist appointment conflicts
+    await this.checkForAppointmentConflicts(
+      therapistId,
+      null,
+      startTime,
+      endTime
+    );
 
-    if (status) {
-      where.status = status;
-    }
-
-    if (clientId) {
-      where.clientId = clientId;
-    }
-
-    if (learnerId) {
-      where.learnerId = learnerId;
-    }
-
-    return this.prisma.appointment.findMany({
-      where,
-      orderBy: { startTime: 'asc' },
+    // Create the appointment
+    return this.prismaService.appointment.create({
+      data: {
+        startTime,
+        endTime,
+        type: createAppointmentDto.type,
+        status: createAppointmentDto.status || AppointmentStatus.SCHEDULED,
+        title: createAppointmentDto.title,
+        notes: createAppointmentDto.notes,
+        location: createAppointmentDto.location,
+        clientId,
+        learnerId,
+        therapistId,
+        createdBy: userId,
+      },
       include: {
         client: {
           select: {
@@ -159,32 +145,139 @@ export class AppointmentService {
             id: true,
             firstName: true,
             lastName: true,
-            course: true,
           },
         },
-        attendanceRecord: true,
+        therapist: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
       },
-    });
+    }) as unknown as Appointment;
+  }
+
+  /**
+   * Find all appointments with optional filtering
+   * @param startDate - Optional start date to filter by
+   * @param endDate - Optional end date to filter by
+   * @param therapistId - Optional therapist ID to filter by
+   * @param clientId - Optional client ID to filter by
+   * @param learnerId - Optional learner ID to filter by
+   * @param status - Optional status to filter by
+   * @returns Array of appointments
+   */
+  async findAll(
+    startDate?: string,
+    endDate?: string,
+    therapistId?: string,
+    clientId?: string,
+    learnerId?: string,
+    status?: string,
+  ): Promise<Appointment[]> {
+    const where: any = {};
+
+    // Add date range filter if provided
+    if (startDate || endDate) {
+      where.startTime = {};
+      
+      if (startDate) {
+        where.startTime.gte = new Date(startDate);
+      }
+      
+      if (endDate) {
+        where.startTime.lte = new Date(endDate);
+      }
+    }
+
+    // Add other filters if provided
+    if (therapistId) {
+      where.therapistId = BigInt(therapistId);
+    }
+
+    if (clientId) {
+      where.clientId = BigInt(clientId);
+    }
+
+    if (learnerId) {
+      where.learnerId = BigInt(learnerId);
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    return this.prismaService.appointment.findMany({
+      where,
+      include: {
+        client: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+        learner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        therapist: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        startTime: 'asc',
+      },
+    }) as unknown as Appointment[];
   }
 
   /**
    * Find an appointment by ID
    * @param id - Appointment ID
-   * @returns Appointment with related data
-   * @throws NotFoundException if appointment not found
+   * @returns The found appointment
    */
-  async findOne(id: string) {
-    const appointment = await this.prisma.appointment.findUnique({
+  async findOne(id: bigint): Promise<Appointment> {
+    const appointment = await this.prismaService.appointment.findUnique({
       where: { id },
       include: {
-        client: true,
-        learner: true,
-        attendanceRecord: true,
-        statusHistory: {
-          orderBy: { changedAt: 'desc' },
+        client: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+        learner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        therapist: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
         },
       },
-    });
+    }) as unknown as Appointment | null;
 
     if (!appointment) {
       throw new NotFoundException(`Appointment with ID ${id} not found`);
@@ -196,282 +289,156 @@ export class AppointmentService {
   /**
    * Update an appointment
    * @param id - Appointment ID
-   * @param updateAppointmentDto - Updated appointment data
-   * @returns Updated appointment
-   * @throws NotFoundException if appointment not found
+   * @param updateAppointmentDto - Data for updating the appointment
+   * @param userId - ID of the user updating this appointment
+   * @returns The updated appointment
    */
-  async update(id: string, updateAppointmentDto: UpdateAppointmentDto) {
-    // Get current appointment to check if status is changing
-    const currentAppointment = await this.prisma.appointment.findUnique({
-      where: { id },
-      select: { status: true },
-    });
+  async update(
+    id: bigint,
+    updateAppointmentDto: UpdateAppointmentDto,
+    userId: bigint
+  ): Promise<Appointment> {
+    // Check if appointment exists
+    const existingAppointment = await this.findOne(id);
 
-    if (!currentAppointment) {
-      throw new NotFoundException(`Appointment with ID ${id} not found`);
+    // Prepare update data
+    const updateData: any = {
+      updatedBy: userId,
+    };
+
+    // Handle start and end time updates
+    let startTime = existingAppointment.startTime;
+    let endTime = existingAppointment.endTime;
+
+    if (updateAppointmentDto.startTime) {
+      startTime = new Date(updateAppointmentDto.startTime);
+      updateData.startTime = startTime;
     }
 
-    // If client ID is provided, verify client exists
-    if (updateAppointmentDto.clientId) {
-      const client = await this.prisma.client.findUnique({
-        where: { id: updateAppointmentDto.clientId },
+    if (updateAppointmentDto.endTime) {
+      endTime = new Date(updateAppointmentDto.endTime);
+      updateData.endTime = endTime;
+    }
+
+    // Validate times if either start or end time is updated
+    if (updateAppointmentDto.startTime || updateAppointmentDto.endTime) {
+      this.validateAppointmentTimes(startTime, endTime);
+    }
+
+    // Handle ID updates and validate entities exist
+    let therapistId = existingAppointment.therapistId;
+    if (updateAppointmentDto.therapistId) {
+      therapistId = BigInt(updateAppointmentDto.therapistId);
+      
+      // Verify therapist exists
+      const therapist = await this.prismaService.user.findUnique({
+        where: { id: therapistId },
       });
 
-      if (!client) {
-        throw new NotFoundException(`Client with ID ${updateAppointmentDto.clientId} not found`);
+      if (!therapist) {
+        throw new NotFoundException(`Therapist with ID ${updateAppointmentDto.therapistId} not found`);
       }
+
+      updateData.therapistId = therapistId;
     }
 
-    // If learner ID is provided, verify learner exists and belongs to the client
-    if (updateAppointmentDto.learnerId) {
-      const learner = await this.prisma.learner.findUnique({
-        where: { id: updateAppointmentDto.learnerId },
-      });
-
-      if (!learner) {
-        throw new NotFoundException(`Learner with ID ${updateAppointmentDto.learnerId} not found`);
-      }
-
-      // If client ID is also being updated, check against that
-      if (updateAppointmentDto.clientId && learner.clientId !== updateAppointmentDto.clientId) {
-        throw new BadRequestException('Learner does not belong to the specified client');
-      }
-    }
-
-    // Validate appointment times if both are provided
-    if (updateAppointmentDto.startTime && updateAppointmentDto.endTime) {
-      const startTime = new Date(updateAppointmentDto.startTime);
-      const endTime = new Date(updateAppointmentDto.endTime);
-
-      if (startTime >= endTime) {
-        throw new BadRequestException('End time must be after start time');
-      }
-    }
-
-    // Check if status is changing
-    const isStatusChanging = updateAppointmentDto.status && 
-                            updateAppointmentDto.status !== currentAppointment.status;
-
-    return this.prisma.$transaction(async (prisma) => {
-      const updatedAppointment = await prisma.appointment.update({
-        where: { id },
-        data: {
-          title: updateAppointmentDto.title,
-          startTime: updateAppointmentDto.startTime ? new Date(updateAppointmentDto.startTime) : undefined,
-          endTime: updateAppointmentDto.endTime ? new Date(updateAppointmentDto.endTime) : undefined,
-          status: updateAppointmentDto.status,
-          notes: updateAppointmentDto.notes,
-          location: updateAppointmentDto.location,
-          reminderSent: updateAppointmentDto.reminderSent,
-          clientId: updateAppointmentDto.clientId,
-          learnerId: updateAppointmentDto.learnerId,
-        },
-        include: {
-          client: true,
-          learner: true,
-          attendanceRecord: true,
-        },
-      });
-
-      // If status changed, record in history
-      if (isStatusChanging) {
-        await prisma.statusHistory.create({
-          data: {
-            appointmentId: id,
-            previousStatus: currentAppointment.status,
-            newStatus: updateAppointmentDto.status!,
-            notes: 'Status updated during appointment edit',
-          },
+    let clientId = existingAppointment.clientId;
+    if (updateAppointmentDto.clientId !== undefined) {
+      if (updateAppointmentDto.clientId) {
+        clientId = BigInt(updateAppointmentDto.clientId);
+        
+        // Verify client exists
+        const client = await this.prismaService.client.findUnique({
+          where: { id: clientId },
         });
+
+        if (!client) {
+          throw new NotFoundException(`Client with ID ${updateAppointmentDto.clientId} not found`);
+        }
+      } else {
+        clientId = null;
       }
 
-      return updatedAppointment;
-    });
-  }
-
-  /**
-   * Remove an appointment
-   * @param id - Appointment ID
-   * @returns Removed appointment
-   * @throws NotFoundException if appointment not found
-   */
-  async remove(id: string) {
-    try {
-      return await this.prisma.appointment.delete({
-        where: { id },
-      });
-    } catch (error) {
-      throw new NotFoundException(`Appointment with ID ${id} not found`);
+      updateData.clientId = clientId;
     }
-  }
 
-  /**
-   * Update appointment status
-   * @param id - Appointment ID
-   * @param updateStatusDto - Status update data
-   * @returns Updated appointment
-   * @throws NotFoundException if appointment not found
-   */
-  async updateStatus(id: string, updateStatusDto: UpdateAppointmentStatusDto) {
-    const currentAppointment = await this.prisma.appointment.findUnique({
+    let learnerId = existingAppointment.learnerId;
+    if (updateAppointmentDto.learnerId !== undefined) {
+      if (updateAppointmentDto.learnerId) {
+        learnerId = BigInt(updateAppointmentDto.learnerId);
+        
+        // Verify learner exists
+        const learner = await this.prismaService.learner.findUnique({
+          where: { id: learnerId },
+        }) as unknown as { id: bigint; clientId: bigint };
+
+        if (!learner) {
+          throw new NotFoundException(`Learner with ID ${updateAppointmentDto.learnerId} not found`);
+        }
+
+        // If client ID not provided, get it from learner
+        if (clientId === null && !updateAppointmentDto.clientId) {
+          const learner = await this.prismaService.learner.findUnique({
+            where: { id: learnerId },
+          }) as unknown as { id: bigint; clientId: bigint };
+          
+          clientId = learner.clientId;
+          updateData.clientId = clientId;
+        }
+      } else {
+        learnerId = null;
+      }
+
+      updateData.learnerId = learnerId;
+    }
+
+    // Add other fields to update data
+    if (updateAppointmentDto.type !== undefined) {
+      updateData.type = updateAppointmentDto.type;
+    }
+
+    if (updateAppointmentDto.status !== undefined) {
+      updateData.status = updateAppointmentDto.status;
+    }
+
+    if (updateAppointmentDto.title !== undefined) {
+      updateData.title = updateAppointmentDto.title;
+    }
+
+    if (updateAppointmentDto.notes !== undefined) {
+      updateData.notes = updateAppointmentDto.notes;
+    }
+
+    if (updateAppointmentDto.location !== undefined) {
+      updateData.location = updateAppointmentDto.location;
+    }
+
+    // Check for appointment conflicts if times or therapist changed
+    if (
+      updateAppointmentDto.startTime ||
+      updateAppointmentDto.endTime ||
+      updateAppointmentDto.therapistId
+    ) {
+      await this.checkForAppointmentConflicts(
+        therapistId,
+        id,
+        startTime,
+        endTime
+      );
+    }
+
+    // Update the appointment
+    return this.prismaService.appointment.update({
       where: { id },
-      select: { status: true },
-    });
-
-    if (!currentAppointment) {
-      throw new NotFoundException(`Appointment with ID ${id} not found`);
-    }
-
-    return this.prisma.$transaction(async (prisma) => {
-      // Update appointment status
-      const updatedAppointment = await prisma.appointment.update({
-        where: { id },
-        data: {
-          status: updateStatusDto.status,
-        },
-        include: {
-          client: true,
-          learner: true,
-          attendanceRecord: true,
-        },
-      });
-
-      // Record status change in history
-      await prisma.statusHistory.create({
-        data: {
-          appointmentId: id,
-          previousStatus: currentAppointment.status,
-          newStatus: updateStatusDto.status,
-          notes: updateStatusDto.notes || 'Status updated',
-        },
-      });
-
-      // If status is COMPLETED or NO_SHOW and there's no attendance record yet,
-      // automatically create one
-      if (
-        (updateStatusDto.status === AppointmentStatus.COMPLETED || 
-         updateStatusDto.status === AppointmentStatus.NO_SHOW) && 
-        !updatedAppointment.attendanceRecord &&
-        updatedAppointment.learnerId
-      ) {
-        const attendanceStatus = updateStatusDto.status === AppointmentStatus.COMPLETED 
-          ? AttendanceStatus.PRESENT 
-          : AttendanceStatus.NO_SHOW;
-
-        await prisma.attendanceRecord.create({
-          data: {
-            appointmentId: id,
-            learnerId: updatedAppointment.learnerId,
-            status: attendanceStatus,
-            notes: `Automatically recorded based on appointment status change to ${updateStatusDto.status}`,
-          },
-        });
-      }
-
-      return updatedAppointment;
-    });
-  }
-
-  /**
-   * Find all appointments for a specific client
-   * @param clientId - Client ID
-   * @returns List of appointments for the client
-   */
-  async findByClient(clientId: string) {
-    // Verify client exists
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-    });
-
-    if (!client) {
-      throw new NotFoundException(`Client with ID ${clientId} not found`);
-    }
-
-    return this.prisma.appointment.findMany({
-      where: { clientId },
-      orderBy: { startTime: 'asc' },
-      include: {
-        learner: true,
-        attendanceRecord: true,
-      },
-    });
-  }
-
-  /**
-   * Find all appointments for a specific learner
-   * @param learnerId - Learner ID
-   * @returns List of appointments for the learner
-   */
-  async findByLearner(learnerId: string) {
-    // Verify learner exists
-    const learner = await this.prisma.learner.findUnique({
-      where: { id: learnerId },
-    });
-
-    if (!learner) {
-      throw new NotFoundException(`Learner with ID ${learnerId} not found`);
-    }
-
-    return this.prisma.appointment.findMany({
-      where: { learnerId },
-      orderBy: { startTime: 'asc' },
-      include: {
-        client: true,
-        attendanceRecord: true,
-      },
-    });
-  }
-
-  /**
-   * Get appointments for calendar view
-   * @param year - Year
-   * @param month - Month (1-12)
-   * @param day - Optional day for day view
-   * @param view - Calendar view type (month, week, day)
-   * @returns Appointments for the specified calendar view
-   */
-  async getCalendarView(
-    year: number,
-    month: number, // 1-12
-    day?: number,
-    view: 'month' | 'week' | 'day' = 'month',
-  ) {
-    // Adjust month to 0-11 for JavaScript Date
-    const jsMonth = month - 1;
-    
-    let startDate: Date;
-    let endDate: Date;
-
-    if (view === 'month') {
-      // Month view: get all appointments in the month
-      startDate = startOfMonth(new Date(year, jsMonth));
-      endDate = endOfMonth(new Date(year, jsMonth));
-    } else if (view === 'week' && day) {
-      // Week view: get all appointments in the week containing the specified day
-      startDate = startOfWeek(new Date(year, jsMonth, day));
-      endDate = endOfWeek(new Date(year, jsMonth, day));
-    } else if (view === 'day' && day) {
-      // Day view: get all appointments on the specified day
-      startDate = startOfDay(new Date(year, jsMonth, day));
-      endDate = endOfDay(new Date(year, jsMonth, day));
-    } else {
-      throw new BadRequestException('Invalid calendar view parameters');
-    }
-
-    return this.prisma.appointment.findMany({
-      where: {
-        startTime: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      orderBy: { startTime: 'asc' },
+      data: updateData,
       include: {
         client: {
           select: {
             id: true,
             firstName: true,
             lastName: true,
+            email: true,
+            phone: true,
           },
         },
         learner: {
@@ -481,87 +448,160 @@ export class AppointmentService {
             lastName: true,
           },
         },
+        therapist: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
       },
-    });
+    }) as unknown as Appointment;
   }
 
   /**
-   * Record attendance for an appointment
-   * @param createAttendanceDto - Attendance data
-   * @returns Created attendance record
+   * Remove an appointment
+   * @param id - Appointment ID
+   * @returns The removed appointment
    */
-  async recordAttendance(createAttendanceDto: CreateAttendanceRecordDto) {
-    // Verify appointment exists
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { id: createAttendanceDto.appointmentId },
+  async remove(id: bigint): Promise<Appointment> {
+    // Check if appointment exists
+    await this.findOne(id);
+
+    // Delete the appointment
+    return this.prismaService.appointment.delete({
+      where: { id },
       include: {
-        attendanceRecord: true,
+        client: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+        learner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        therapist: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
       },
-    });
+    }) as unknown as Appointment;
+  }
 
-    if (!appointment) {
-      throw new NotFoundException(`Appointment with ID ${createAttendanceDto.appointmentId} not found`);
+  /**
+   * Validate appointment start and end times
+   * @param startTime - Appointment start time
+   * @param endTime - Appointment end time
+   */
+  private validateAppointmentTimes(startTime: Date, endTime: Date): void {
+    // Check if start time is in the past
+    if (startTime < new Date()) {
+      throw new BadRequestException('Start time cannot be in the past');
     }
 
-    // Verify learner exists
-    const learner = await this.prisma.learner.findUnique({
-      where: { id: createAttendanceDto.learnerId },
-    });
-
-    if (!learner) {
-      throw new NotFoundException(`Learner with ID ${createAttendanceDto.learnerId} not found`);
+    // Check if end time is before start time
+    if (endTime <= startTime) {
+      throw new BadRequestException('End time must be after start time');
     }
 
-    // Check if attendance record already exists
-    if (appointment.attendanceRecord) {
-      // Update existing record
-      return this.prisma.attendanceRecord.update({
-        where: { id: appointment.attendanceRecord.id },
-        data: {
-          status: createAttendanceDto.status as AttendanceStatus,
-          notes: createAttendanceDto.notes,
-          recordedAt: new Date(),
-        },
-        include: {
-          appointment: true,
-          learner: true,
-        },
-      });
-    } else {
-      // Create new record
-      return this.prisma.attendanceRecord.create({
-        data: {
-          appointmentId: createAttendanceDto.appointmentId,
-          learnerId: createAttendanceDto.learnerId,
-          status: createAttendanceDto.status as AttendanceStatus,
-          notes: createAttendanceDto.notes,
-        },
-        include: {
-          appointment: true,
-          learner: true,
-        },
-      });
+    // Check if appointment is too short (e.g., less than 15 minutes)
+    const durationMinutes = (endTime.getTime() - startTime.getTime()) / (1000 * 60);
+    if (durationMinutes < 15) {
+      throw new BadRequestException('Appointment duration must be at least 15 minutes');
+    }
+
+    // Check if appointment is too long (e.g., more than 4 hours)
+    if (durationMinutes > 240) {
+      throw new BadRequestException('Appointment duration cannot exceed 4 hours');
     }
   }
 
   /**
-   * Get status history for an appointment
-   * @param appointmentId - Appointment ID
-   * @returns Status history records
+   * Check for appointment conflicts
+   * @param therapistId - Therapist ID
+   * @param excludeAppointmentId - Optional appointment ID to exclude from conflict check
+   * @param startTime - Appointment start time
+   * @param endTime - Appointment end time
    */
-  async getStatusHistory(appointmentId: string) {
-    // Verify appointment exists
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { id: appointmentId },
-    });
+  private async checkForAppointmentConflicts(
+    therapistId: bigint,
+    excludeAppointmentId: bigint | null,
+    startTime: Date,
+    endTime: Date
+  ): Promise<void> {
+    // Create base query to find conflicting appointments
+    const whereCondition: any = {
+      therapistId,
+      status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.COMPLETED] },
+      OR: [
+        {
+          // Case 1: New appointment starts during an existing appointment
+          startTime: { lt: endTime },
+          endTime: { gt: startTime },
+        },
+        {
+          // Case 2: New appointment contains an existing appointment
+          startTime: { gte: startTime },
+          endTime: { lte: endTime },
+        },
+      ],
+    };
 
-    if (!appointment) {
-      throw new NotFoundException(`Appointment with ID ${appointmentId} not found`);
+    // Exclude the current appointment if updating
+    if (excludeAppointmentId) {
+      whereCondition.id = { not: excludeAppointmentId };
     }
 
-    return this.prisma.statusHistory.findMany({
-      where: { appointmentId },
-      orderBy: { changedAt: 'desc' },
+    // Find conflicting appointments
+    const conflictingAppointments = await this.prismaService.appointment.findMany({
+      where: whereCondition,
+      select: {
+        id: true,
+        startTime: true,
+        endTime: true,
+        title: true,
+        therapist: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
     });
+
+    // Throw error if conflicts found
+    if (conflictingAppointments.length > 0) {
+      const conflict = conflictingAppointments[0] as unknown as {
+        id: bigint;
+        startTime: Date;
+        endTime: Date;
+        title: string;
+        therapist: {
+          firstName: string;
+          lastName: string;
+        };
+      };
+      
+      const conflictStart = conflict.startTime.toLocaleTimeString();
+      const conflictEnd = conflict.endTime.toLocaleTimeString();
+      const therapistName = `${conflict.therapist.firstName} ${conflict.therapist.lastName}`;
+      
+      throw new ConflictException(
+        `Appointment conflicts with existing appointment for ${therapistName} from ${conflictStart} to ${conflictEnd}`
+      );
+    }
   }
 }

@@ -1,133 +1,131 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { CreateWaitlistEntryDto, UpdateWaitlistEntryDto } from './dto/waitlist.dto';
-import { WaitlistPriority, WaitlistStatus } from '@prisma/client';
+import { CreateWaitlistDto } from './dto/create-waitlist.dto';
+import { UpdateWaitlistDto } from './dto/update-waitlist.dto';
 
+/**
+ * Enum for waitlist status values, must match Prisma schema definitions
+ */
+export enum WaitlistStatus {
+  WAITING = 'WAITING',
+  CONTACTED = 'CONTACTED',
+  SCHEDULED = 'SCHEDULED',
+  CANCELLED = 'CANCELLED'
+}
+
+/**
+ * Enum for service type values, must match Prisma schema definitions
+ */
+export enum ServiceType {
+  SPEECH_THERAPY = 'SPEECH_THERAPY',
+  OCCUPATIONAL_THERAPY = 'OCCUPATIONAL_THERAPY',
+  PHYSICAL_THERAPY = 'PHYSICAL_THERAPY',
+  BEHAVIORAL_THERAPY = 'BEHAVIORAL_THERAPY'
+}
+
+/**
+ * Service handling waitlist business logic
+ */
 @Injectable()
 export class WaitlistService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Create a new waitlist entry
-   * @param createWaitlistEntryDto - Waitlist entry data
-   * @returns Newly created waitlist entry
+   * @param createWaitlistDto Data for creating waitlist entry
+   * @param userId ID of user creating the entry
+   * @returns Created waitlist entry
    */
-  async create(createWaitlistEntryDto: CreateWaitlistEntryDto) {
-    // Verify client exists
-    const client = await this.prisma.client.findUnique({
-      where: { id: createWaitlistEntryDto.clientId },
-    });
+  async create(createWaitlistDto: CreateWaitlistDto, userId: bigint) {
+    const { clientId, serviceType, status } = createWaitlistDto;
 
-    if (!client) {
-      throw new NotFoundException(`Client with ID ${createWaitlistEntryDto.clientId} not found`);
+    // Check if client exists using raw query
+    const clientResult = await this.prisma.$queryRaw`
+      SELECT id FROM "clients" WHERE id = ${BigInt(clientId)}
+    `;
+
+    const clientExists = Array.isArray(clientResult) && clientResult.length > 0;
+    if (!clientExists) {
+      throw new NotFoundException(`Client with ID ${clientId} not found`);
     }
 
-    return this.prisma.waitlistEntry.create({
-      data: {
-        clientId: createWaitlistEntryDto.clientId,
-        priority: createWaitlistEntryDto.priority || WaitlistPriority.MEDIUM,
-        requestedService: createWaitlistEntryDto.requestedService,
-        notes: createWaitlistEntryDto.notes,
-        status: createWaitlistEntryDto.status || WaitlistStatus.WAITING,
-        followUpDate: createWaitlistEntryDto.followUpDate ? new Date(createWaitlistEntryDto.followUpDate) : null,
-      },
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
-      },
-    });
+    // Create waitlist entry with default status if not provided
+    const waitlistStatus = status || WaitlistStatus.WAITING;
+    
+    // Use raw SQL queries since we're having issues with Prisma client models
+    const result = await this.prisma.$queryRaw`
+      INSERT INTO "waitlist" (client_id, service_type, status, request_date, created_by)
+      VALUES (${BigInt(clientId)}, ${serviceType}, ${waitlistStatus}, ${new Date()}, ${userId})
+      RETURNING id, client_id, service_type, status, request_date, created_by
+    `;
+
+    return Array.isArray(result) ? result[0] : result;
   }
 
   /**
    * Find all waitlist entries with optional filtering
-   * @param options - Filter options
+   * @param serviceType Optional filter by service type
+   * @param status Optional filter by waitlist status
    * @returns List of waitlist entries
    */
-  async findAll(options: {
-    priority?: WaitlistPriority;
-    status?: WaitlistStatus;
-    clientId?: string;
-    followUpFrom?: string;
-    followUpTo?: string;
-    sortBy?: string;
-    sortOrder?: 'asc' | 'desc';
-  }) {
-    const { 
-      priority, 
-      status, 
-      clientId, 
-      followUpFrom, 
-      followUpTo, 
-      sortBy = 'createdAt', 
-      sortOrder = 'desc' 
-    } = options;
-
-    // Build where clause based on provided filters
-    const where: any = {};
-
-    if (priority) {
-      where.priority = priority;
+  async findAll(
+    serviceType?: string,
+    status?: string,
+  ) {
+    // Build the query with params to safely handle filtering
+    let query = `
+      SELECT w.*, 
+        c.id as client_id, 
+        c.first_name, 
+        c.last_name, 
+        c.email, 
+        c.phone, 
+        c.status as client_status, 
+        c.priority
+      FROM "waitlist" w
+      JOIN "clients" c ON w.client_id = c.id
+      WHERE 1=1
+    `;
+    
+    const params: any[] = [];
+    
+    if (serviceType) {
+      params.push(serviceType);
+      query += ` AND w.service_type = $${params.length}`;
     }
-
+    
     if (status) {
-      where.status = status;
+      params.push(status);
+      query += ` AND w.status = $${params.length}`;
     }
-
-    if (clientId) {
-      where.clientId = clientId;
-    }
-
-    // Handle follow-up date range
-    if (followUpFrom || followUpTo) {
-      where.followUpDate = {};
-      
-      if (followUpFrom) {
-        where.followUpDate.gte = new Date(followUpFrom);
-      }
-      
-      if (followUpTo) {
-        where.followUpDate.lte = new Date(followUpTo);
-      }
-    }
-
-    return this.prisma.waitlistEntry.findMany({
-      where,
-      orderBy: { [sortBy]: sortOrder },
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
-      },
-    });
+    
+    query += ` ORDER BY w.request_date ASC`;
+    
+    return await this.prisma.$queryRawUnsafe(query, ...params);
   }
 
   /**
-   * Find a waitlist entry by ID
-   * @param id - Waitlist entry ID
-   * @returns Waitlist entry with related data
-   * @throws NotFoundException if waitlist entry not found
+   * Find waitlist entry by ID
+   * @param id Waitlist entry ID
+   * @returns Waitlist entry or null
    */
-  async findOne(id: string) {
-    const waitlistEntry = await this.prisma.waitlistEntry.findUnique({
-      where: { id },
-      include: {
-        client: true,
-      },
-    });
+  async findOne(id: bigint) {
+    const waitlistResult = await this.prisma.$queryRaw`
+      SELECT w.*, 
+        c.id as client_id, 
+        c.first_name, 
+        c.last_name, 
+        c.email, 
+        c.phone, 
+        c.status as client_status, 
+        c.priority
+      FROM "waitlist" w
+      JOIN "clients" c ON w.client_id = c.id
+      WHERE w.id = ${id}
+    `;
 
+    const waitlistEntry = Array.isArray(waitlistResult) ? waitlistResult[0] : waitlistResult;
+    
     if (!waitlistEntry) {
       throw new NotFoundException(`Waitlist entry with ID ${id} not found`);
     }
@@ -136,115 +134,101 @@ export class WaitlistService {
   }
 
   /**
-   * Update a waitlist entry
-   * @param id - Waitlist entry ID
-   * @param updateWaitlistEntryDto - Updated waitlist entry data
+   * Update waitlist entry by ID
+   * @param id Waitlist entry ID
+   * @param updateWaitlistDto Data for updating waitlist entry
+   * @param userId ID of user updating the entry
    * @returns Updated waitlist entry
-   * @throws NotFoundException if waitlist entry not found
    */
-  async update(id: string, updateWaitlistEntryDto: UpdateWaitlistEntryDto) {
-    // If clientId is provided, verify client exists
-    if (updateWaitlistEntryDto.clientId) {
-      const client = await this.prisma.client.findUnique({
-        where: { id: updateWaitlistEntryDto.clientId },
-      });
+  async update(id: bigint, updateWaitlistDto: UpdateWaitlistDto, userId: bigint) {
+    // Check if waitlist entry exists
+    const existingResult = await this.prisma.$queryRaw`
+      SELECT id FROM "waitlist" WHERE id = ${id}
+    `;
 
-      if (!client) {
-        throw new NotFoundException(`Client with ID ${updateWaitlistEntryDto.clientId} not found`);
+    const entryExists = Array.isArray(existingResult) && existingResult.length > 0;
+    if (!entryExists) {
+      throw new NotFoundException(`Waitlist entry with ID ${id} not found`);
+    }
+
+    // Check if client exists if client ID is provided
+    if (updateWaitlistDto.clientId) {
+      const clientResult = await this.prisma.$queryRaw`
+        SELECT id FROM "clients" WHERE id = ${BigInt(updateWaitlistDto.clientId)}
+      `;
+
+      const clientExists = Array.isArray(clientResult) && clientResult.length > 0;
+      if (!clientExists) {
+        throw new NotFoundException(`Client with ID ${updateWaitlistDto.clientId} not found`);
       }
     }
 
-    try {
-      return await this.prisma.waitlistEntry.update({
-        where: { id },
-        data: {
-          priority: updateWaitlistEntryDto.priority,
-          requestedService: updateWaitlistEntryDto.requestedService,
-          notes: updateWaitlistEntryDto.notes,
-          status: updateWaitlistEntryDto.status,
-          followUpDate: updateWaitlistEntryDto.followUpDate 
-            ? new Date(updateWaitlistEntryDto.followUpDate) 
-            : undefined,
-          clientId: updateWaitlistEntryDto.clientId,
-        },
-        include: {
-          client: true,
-        },
-      });
-    } catch (error) {
-      throw new NotFoundException(`Waitlist entry with ID ${id} not found`);
+    // Build update query
+    const updates: string[] = [];
+    const params: any[] = [];
+
+    updates.push(`updated_by = $${params.length + 1}`);
+    params.push(userId);
+
+    if (updateWaitlistDto.serviceType) {
+      updates.push(`service_type = $${params.length + 1}`);
+      params.push(updateWaitlistDto.serviceType);
     }
+
+    if (updateWaitlistDto.status) {
+      updates.push(`status = $${params.length + 1}`);
+      params.push(updateWaitlistDto.status);
+    }
+
+    if (updateWaitlistDto.clientId) {
+      updates.push(`client_id = $${params.length + 1}`);
+      params.push(BigInt(updateWaitlistDto.clientId));
+    }
+
+    if (updateWaitlistDto.requestDate) {
+      updates.push(`request_date = $${params.length + 1}`);
+      params.push(new Date(updateWaitlistDto.requestDate));
+    }
+
+    // Add the ID as the last parameter
+    params.push(id);
+    
+    const query = `
+      UPDATE "waitlist"
+      SET ${updates.join(', ')}
+      WHERE id = $${params.length}
+      RETURNING *
+    `;
+    
+    await this.prisma.$queryRawUnsafe(query, ...params);
+    
+    // Return the updated record
+    return this.findOne(id);
   }
 
   /**
-   * Remove a waitlist entry
-   * @param id - Waitlist entry ID
+   * Remove waitlist entry by ID
+   * @param id Waitlist entry ID
    * @returns Removed waitlist entry
-   * @throws NotFoundException if waitlist entry not found
    */
-  async remove(id: string) {
-    try {
-      return await this.prisma.waitlistEntry.delete({
-        where: { id },
-      });
-    } catch (error) {
+  async remove(id: bigint) {
+    // Check if waitlist entry exists
+    const existingResult = await this.prisma.$queryRaw`
+      SELECT id FROM "waitlist" WHERE id = ${id}
+    `;
+
+    const entryExists = Array.isArray(existingResult) && existingResult.length > 0;
+    if (!entryExists) {
       throw new NotFoundException(`Waitlist entry with ID ${id} not found`);
     }
-  }
 
-  /**
-   * Get waitlist entries with follow-ups due today or overdue
-   * @returns List of waitlist entries with due follow-ups
-   */
-  async getDueFollowUps() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Delete the waitlist entry
+    const result = await this.prisma.$queryRaw`
+      DELETE FROM "waitlist"
+      WHERE id = ${id}
+      RETURNING *
+    `;
 
-    return this.prisma.waitlistEntry.findMany({
-      where: {
-        followUpDate: {
-          lte: today,
-        },
-        status: {
-          not: WaitlistStatus.REMOVED,
-        },
-      },
-      orderBy: [
-        { priority: 'asc' }, // HIGH first
-        { followUpDate: 'asc' }, // Oldest follow-up date first
-      ],
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
-      },
-    });
-  }
-
-  /**
-   * Find all waitlist entries for a specific client
-   * @param clientId - Client ID
-   * @returns List of waitlist entries for the client
-   */
-  async findByClient(clientId: string) {
-    // Verify client exists
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-    });
-
-    if (!client) {
-      throw new NotFoundException(`Client with ID ${clientId} not found`);
-    }
-
-    return this.prisma.waitlistEntry.findMany({
-      where: { clientId },
-      orderBy: { createdAt: 'desc' },
-    });
+    return Array.isArray(result) ? result[0] : result;
   }
 }

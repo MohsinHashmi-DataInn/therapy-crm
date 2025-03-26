@@ -1,101 +1,124 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { CreateLearnerDto, UpdateLearnerDto } from './dto/learner.dto';
-import { LearnerStatus } from '@prisma/client';
+import { CreateLearnerDto } from './dto/create-learner.dto';
+import { UpdateLearnerDto } from './dto/update-learner.dto';
 
+// Define local Learner interface to match the Prisma schema
+export interface Learner {
+  id: bigint;
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: Date | null;
+  gender?: string;
+  course?: string;
+  schedule?: string;
+  status?: string;
+  notes?: string | null;
+  clientId?: bigint;
+  instructorId?: bigint | null;
+  createdBy?: bigint;
+  updatedBy?: bigint | null;
+}
+
+/**
+ * Service handling learner-related business logic
+ */
 @Injectable()
 export class LearnerService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prismaService: PrismaService) {}
 
   /**
    * Create a new learner
-   * @param createLearnerDto - Learner data
-   * @returns Newly created learner
+   * @param createLearnerDto - Data for creating the learner
+   * @param userId - ID of the user creating this learner
+   * @returns The created learner
    */
-  async create(createLearnerDto: CreateLearnerDto) {
+  async create(createLearnerDto: CreateLearnerDto, userId: bigint): Promise<Learner> {
     // Verify client exists
-    const client = await this.prisma.client.findUnique({
-      where: { id: createLearnerDto.clientId },
+    const client = await this.prismaService.client.findUnique({
+      where: { id: BigInt(createLearnerDto.clientId) },
     });
 
     if (!client) {
       throw new NotFoundException(`Client with ID ${createLearnerDto.clientId} not found`);
     }
 
-    return this.prisma.learner.create({
+    // Prepare instructor ID if provided
+    let instructorId: bigint | null = null;
+    if (createLearnerDto.instructorId) {
+      instructorId = BigInt(createLearnerDto.instructorId);
+      // Verify instructor exists
+      const instructor = await this.prismaService.user.findUnique({
+        where: { id: instructorId },
+      });
+
+      if (!instructor) {
+        throw new NotFoundException(`Instructor with ID ${createLearnerDto.instructorId} not found`);
+      }
+    }
+
+    // Handle date of birth conversion
+    let dateOfBirth: Date | undefined;
+    if (createLearnerDto.dateOfBirth) {
+      dateOfBirth = new Date(createLearnerDto.dateOfBirth);
+      if (isNaN(dateOfBirth.getTime())) {
+        throw new BadRequestException('Invalid date of birth format');
+      }
+    }
+
+    // Create learner
+    const learner = await this.prismaService.learner.create({
       data: {
         firstName: createLearnerDto.firstName,
         lastName: createLearnerDto.lastName,
-        dateOfBirth: createLearnerDto.dateOfBirth ? new Date(createLearnerDto.dateOfBirth) : null,
+        dateOfBirth: dateOfBirth,
+        gender: createLearnerDto.gender,
         course: createLearnerDto.course,
         schedule: createLearnerDto.schedule,
-        status: createLearnerDto.status || LearnerStatus.ACTIVE,
-        startDate: createLearnerDto.startDate ? new Date(createLearnerDto.startDate) : null,
+        status: createLearnerDto.status,
         notes: createLearnerDto.notes,
-        clientId: createLearnerDto.clientId,
+        client: {
+          connect: { id: BigInt(createLearnerDto.clientId) },
+        },
+        instructor: instructorId ? {
+          connect: { id: instructorId },
+        } : undefined,
+        createdBy: userId,
       },
       include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
+        client: true,
+        instructor: true,
       },
-    });
+    }) as unknown as Learner;
+
+    return learner;
   }
 
   /**
-   * Find all learners with optional filtering and sorting
-   * @param options - Search and filter options
-   * @returns List of learners
+   * Find all learners with optional filtering
+   * @param clientId - Optional client ID to filter by
+   * @param instructorId - Optional instructor ID to filter by
+   * @param status - Optional status to filter by
+   * @returns Array of learners
    */
-  async findAll(options: {
-    search?: string;
-    course?: string;
-    status?: string;
-    clientId?: string;
-    sortBy?: string;
-    sortOrder?: 'asc' | 'desc';
-  }) {
-    const { 
-      search, 
-      course, 
-      status, 
-      clientId, 
-      sortBy = 'lastName', 
-      sortOrder = 'asc' 
-    } = options;
-
-    // Build where clause based on provided filters
+  async findAll(clientId?: string, instructorId?: string, status?: string): Promise<Learner[]> {
     const where: any = {};
 
-    if (search) {
-      where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { course: { contains: search, mode: 'insensitive' } },
-      ];
+    // Add filters if provided
+    if (clientId) {
+      where.clientId = BigInt(clientId);
     }
 
-    if (course) {
-      where.course = { contains: course, mode: 'insensitive' };
+    if (instructorId) {
+      where.instructorId = BigInt(instructorId);
     }
 
     if (status) {
       where.status = status;
     }
 
-    if (clientId) {
-      where.clientId = clientId;
-    }
-
-    return this.prisma.learner.findMany({
+    const learners = await this.prismaService.learner.findMany({
       where,
-      orderBy: { [sortBy]: sortOrder },
       include: {
         client: {
           select: {
@@ -106,33 +129,54 @@ export class LearnerService {
             phone: true,
           },
         },
-        _count: {
+        instructor: {
           select: {
-            appointments: true,
-            attendanceRecords: true,
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
           },
         },
       },
-    });
+      orderBy: {
+        createdAt: 'desc',
+      },
+    }) as unknown as Learner[];
+
+    return learners;
   }
 
   /**
    * Find a learner by ID
    * @param id - Learner ID
-   * @returns Learner with related data
-   * @throws NotFoundException if learner not found
+   * @returns The found learner
    */
-  async findOne(id: string) {
-    const learner = await this.prisma.learner.findUnique({
+  async findOne(id: bigint): Promise<Learner> {
+    const learner = await this.prismaService.learner.findUnique({
       where: { id },
       include: {
-        client: true,
-        appointments: {
-          orderBy: { startTime: 'desc' },
-          take: 10,
-          include: {
-            attendanceRecord: true,
+        client: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
           },
+        },
+        instructor: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+        appointments: {
+          orderBy: {
+            startTime: 'desc',
+          },
+          take: 5,
         },
       },
     });
@@ -141,140 +185,147 @@ export class LearnerService {
       throw new NotFoundException(`Learner with ID ${id} not found`);
     }
 
-    return learner;
+    return learner as unknown as Learner;
   }
 
   /**
    * Update a learner
    * @param id - Learner ID
-   * @param updateLearnerDto - Updated learner data
-   * @returns Updated learner
-   * @throws NotFoundException if learner not found
+   * @param updateLearnerDto - Data for updating the learner
+   * @param userId - ID of the user updating this learner
+   * @returns The updated learner
    */
-  async update(id: string, updateLearnerDto: UpdateLearnerDto) {
-    // If clientId is provided, verify client exists
+  async update(
+    id: bigint,
+    updateLearnerDto: UpdateLearnerDto,
+    userId: bigint
+  ): Promise<Learner> {
+    // Check if learner exists
+    await this.findOne(id);
+
+    // Handle client ID if provided
+    let clientId: bigint | undefined;
     if (updateLearnerDto.clientId) {
-      const client = await this.prisma.client.findUnique({
-        where: { id: updateLearnerDto.clientId },
+      const client = await this.prismaService.client.findUnique({
+        where: { id: BigInt(updateLearnerDto.clientId) },
       });
 
       if (!client) {
         throw new NotFoundException(`Client with ID ${updateLearnerDto.clientId} not found`);
       }
+
+      clientId = BigInt(updateLearnerDto.clientId);
     }
 
-    try {
-      return await this.prisma.learner.update({
-        where: { id },
-        data: {
-          firstName: updateLearnerDto.firstName,
-          lastName: updateLearnerDto.lastName,
-          dateOfBirth: updateLearnerDto.dateOfBirth ? new Date(updateLearnerDto.dateOfBirth) : undefined,
-          course: updateLearnerDto.course,
-          schedule: updateLearnerDto.schedule,
-          status: updateLearnerDto.status,
-          startDate: updateLearnerDto.startDate ? new Date(updateLearnerDto.startDate) : undefined,
-          notes: updateLearnerDto.notes,
-          clientId: updateLearnerDto.clientId,
-        },
-        include: {
-          client: true,
-        },
-      });
-    } catch (error) {
-      throw new NotFoundException(`Learner with ID ${id} not found`);
+    // Handle instructor ID if provided
+    let instructorId: bigint | null | undefined;
+    if (updateLearnerDto.instructorId !== undefined) {
+      instructorId = updateLearnerDto.instructorId 
+        ? BigInt(updateLearnerDto.instructorId) 
+        : null;
+      
+      if (instructorId) {
+        // Verify instructor exists
+        const instructor = await this.prismaService.user.findUnique({
+          where: { id: instructorId },
+        });
+
+        if (!instructor) {
+          throw new NotFoundException(`Instructor with ID ${updateLearnerDto.instructorId} not found`);
+        }
+      }
     }
+
+    // Handle date of birth conversion
+    let dateOfBirth: Date | undefined;
+    if (updateLearnerDto.dateOfBirth) {
+      dateOfBirth = new Date(updateLearnerDto.dateOfBirth);
+      if (isNaN(dateOfBirth.getTime())) {
+        throw new BadRequestException('Invalid date of birth format');
+      }
+    }
+
+    // Update the learner
+    const updatedLearner = await this.prismaService.learner.update({
+      where: { id },
+      data: {
+        firstName: updateLearnerDto.firstName,
+        lastName: updateLearnerDto.lastName,
+        dateOfBirth: dateOfBirth,
+        gender: updateLearnerDto.gender,
+        course: updateLearnerDto.course,
+        schedule: updateLearnerDto.schedule,
+        status: updateLearnerDto.status,
+        notes: updateLearnerDto.notes,
+        client: clientId ? {
+          connect: { id: clientId },
+        } : undefined,
+        instructor: instructorId !== undefined ? (
+          instructorId ? {
+            connect: { id: instructorId },
+          } : {
+            disconnect: true,
+          }
+        ) : undefined,
+        updatedBy: userId,
+      },
+      include: {
+        client: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+        instructor: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    }) as unknown as Learner;
+
+    return updatedLearner;
   }
 
   /**
    * Remove a learner
    * @param id - Learner ID
-   * @returns Removed learner
-   * @throws NotFoundException if learner not found
+   * @returns The removed learner
    */
-  async remove(id: string) {
-    try {
-      return await this.prisma.learner.delete({
-        where: { id },
-      });
-    } catch (error) {
-      throw new NotFoundException(`Learner with ID ${id} not found`);
-    }
-  }
+  async remove(id: bigint): Promise<Learner> {
+    // Check if learner exists
+    await this.findOne(id);
 
-  /**
-   * Find all learners for a specific client
-   * @param clientId - Client ID
-   * @returns List of learners for the client
-   */
-  async findByClient(clientId: string) {
-    // Verify client exists
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-    });
-
-    if (!client) {
-      throw new NotFoundException(`Client with ID ${clientId} not found`);
-    }
-
-    return this.prisma.learner.findMany({
-      where: { clientId },
+    // Delete the learner
+    const deletedLearner = await this.prismaService.learner.delete({
+      where: { id },
       include: {
-        _count: {
+        client: {
           select: {
-            appointments: true,
-            attendanceRecords: true,
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+        instructor: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
           },
         },
       },
-    });
-  }
+    }) as unknown as Learner;
 
-  /**
-   * Get attendance records for a learner
-   * @param learnerId - Learner ID
-   * @param startDate - Optional start date for filtering
-   * @param endDate - Optional end date for filtering
-   * @returns Attendance records for the learner
-   */
-  async getAttendanceRecords(learnerId: string, startDate?: string, endDate?: string) {
-    // Verify learner exists
-    const learner = await this.prisma.learner.findUnique({
-      where: { id: learnerId },
-    });
-
-    if (!learner) {
-      throw new NotFoundException(`Learner with ID ${learnerId} not found`);
-    }
-
-    // Build where clause based on provided date range
-    const where: any = { learnerId };
-
-    if (startDate || endDate) {
-      where.appointment = {};
-      
-      if (startDate) {
-        where.appointment.startTime = { gte: new Date(startDate) };
-      }
-      
-      if (endDate) {
-        where.appointment.startTime = { 
-          ...(where.appointment.startTime || {}),
-          lte: new Date(endDate)
-        };
-      }
-    }
-
-    return this.prisma.attendanceRecord.findMany({
-      where,
-      include: {
-        appointment: true,
-      },
-      orderBy: {
-        appointment: {
-          startTime: 'desc',
-        },
-      },
-    });
+    return deletedLearner;
   }
 }

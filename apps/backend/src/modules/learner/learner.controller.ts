@@ -1,82 +1,131 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Request,
+  Query,
+} from '@nestjs/common';
+import { 
+  ApiTags, 
+  ApiOperation, 
+  ApiResponse, 
+  ApiParam, 
+  ApiBearerAuth, 
+  ApiQuery 
+} from '@nestjs/swagger';
 import { LearnerService } from './learner.service';
-import { CreateLearnerDto, UpdateLearnerDto } from './dto/learner.dto';
+import { CreateLearnerDto } from './dto/create-learner.dto';
+import { UpdateLearnerDto } from './dto/update-learner.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../auth/guards/roles.guard';
 
+// Define request interface
+interface RequestWithUser {
+  user: {
+    id: string;
+    email: string;
+    role: UserRole;
+  };
+}
+
+/**
+ * Controller handling learner-related endpoints
+ */
 @ApiTags('learners')
 @Controller('learners')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class LearnerController {
   constructor(private readonly learnerService: LearnerService) {}
 
+  /**
+   * Create a new learner
+   */
   @Post()
   @ApiOperation({ summary: 'Create a new learner' })
   @ApiResponse({ status: 201, description: 'Learner successfully created' })
   @ApiResponse({ status: 400, description: 'Bad request' })
-  async create(@Body() createLearnerDto: CreateLearnerDto) {
-    return this.learnerService.create(createLearnerDto);
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Client not found' })
+  async create(@Body() createLearnerDto: CreateLearnerDto, @Request() req: RequestWithUser) {
+    return this.learnerService.create(createLearnerDto, BigInt(req.user.id));
   }
 
+  /**
+   * Get all learners with optional filtering
+   */
   @Get()
   @ApiOperation({ summary: 'Get all learners with optional filtering' })
-  @ApiResponse({ status: 200, description: 'Return all learners' })
-  async findAll(
-    @Query('search') search?: string,
-    @Query('course') course?: string,
-    @Query('status') status?: string,
+  @ApiQuery({ name: 'clientId', required: false, description: 'Filter by client ID' })
+  @ApiQuery({ name: 'instructorId', required: false, description: 'Filter by instructor ID' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by learner status' })
+  @ApiResponse({ status: 200, description: 'Returns all learners matching the filters' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  findAll(
+    @Request() req: RequestWithUser,
     @Query('clientId') clientId?: string,
-    @Query('sortBy') sortBy?: string,
-    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
+    @Query('instructorId') instructorId?: string,
+    @Query('status') status?: string,
   ) {
-    return this.learnerService.findAll({ 
-      search, 
-      course, 
-      status, 
-      clientId, 
-      sortBy, 
-      sortOrder 
-    });
+    // If user is therapist, only show their assigned learners
+    if (req.user.role === UserRole.THERAPIST) {
+      instructorId = req.user.id;
+    }
+    
+    return this.learnerService.findAll(clientId, instructorId, status);
   }
 
+  /**
+   * Get learner by ID
+   */
   @Get(':id')
-  @ApiOperation({ summary: 'Get a learner by id' })
-  @ApiResponse({ status: 200, description: 'Return the learner' })
+  @ApiOperation({ summary: 'Get learner by ID' })
+  @ApiParam({ name: 'id', description: 'Learner ID' })
+  @ApiResponse({ status: 200, description: 'Returns the learner' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Learner not found' })
   async findOne(@Param('id') id: string) {
-    return this.learnerService.findOne(id);
+    return this.learnerService.findOne(BigInt(id));
   }
 
-  @Put(':id')
-  @ApiOperation({ summary: 'Update a learner' })
+  /**
+   * Update learner by ID
+   */
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update learner by ID' })
+  @ApiParam({ name: 'id', description: 'Learner ID' })
   @ApiResponse({ status: 200, description: 'Learner successfully updated' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Learner not found' })
-  async update(@Param('id') id: string, @Body() updateLearnerDto: UpdateLearnerDto) {
-    return this.learnerService.update(id, updateLearnerDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updateLearnerDto: UpdateLearnerDto,
+    @Request() req: RequestWithUser,
+  ) {
+    return this.learnerService.update(BigInt(id), updateLearnerDto, BigInt(req.user.id));
   }
 
+  /**
+   * Delete learner by ID (Admin or Staff only)
+   */
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a learner' })
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: 'Delete learner by ID (Admin or Staff only)' })
+  @ApiParam({ name: 'id', description: 'Learner ID' })
   @ApiResponse({ status: 200, description: 'Learner successfully deleted' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - requires admin or staff role' })
   @ApiResponse({ status: 404, description: 'Learner not found' })
   async remove(@Param('id') id: string) {
-    return this.learnerService.remove(id);
-  }
-
-  @Get('client/:clientId')
-  @ApiOperation({ summary: 'Get all learners for a specific client' })
-  @ApiResponse({ status: 200, description: 'Return all learners for the client' })
-  async findByClient(@Param('clientId') clientId: string) {
-    return this.learnerService.findByClient(clientId);
-  }
-
-  @Get('attendance/:learnerId')
-  @ApiOperation({ summary: 'Get attendance records for a learner' })
-  @ApiResponse({ status: 200, description: 'Return attendance records' })
-  @ApiResponse({ status: 404, description: 'Learner not found' })
-  async getAttendanceRecords(
-    @Param('learnerId') learnerId: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
-    return this.learnerService.getAttendanceRecords(learnerId, startDate, endDate);
+    return this.learnerService.remove(BigInt(id));
   }
 }
