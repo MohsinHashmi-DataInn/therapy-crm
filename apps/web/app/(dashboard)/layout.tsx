@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { MainNav } from "@/components/layout/main-nav";
 import { UserProfile } from "@/components/layout/user-profile";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 /**
  * Dashboard layout for authenticated pages
@@ -15,6 +16,26 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Check authentication on component mount
+  useEffect(() => {
+    const checkAuth = () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        // Redirect to login if no token found
+        router.push('/login');
+        return;
+      }
+      
+      setIsAuthenticated(true);
+      setIsLoading(false);
+    };
+    
+    checkAuth();
+  }, [router]);
   
   // Get the page title based on the current path
   const getPageTitle = (path: string) => {
@@ -25,6 +46,23 @@ export default function DashboardLayout({
     const lastSegment = segments[segments.length - 1];
     return lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1);
   };
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <p className="text-lg font-medium mb-2">Loading...</p>
+          <p className="text-sm text-muted-foreground">Please wait while we verify your credentials</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Only render dashboard content if authenticated
+  if (!isAuthenticated) {
+    return null; // Router will redirect, this prevents flash of dashboard content
+  }
 
   return (
     <div className="flex min-h-screen flex-col">

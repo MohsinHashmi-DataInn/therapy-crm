@@ -67,8 +67,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Protected route handling
   useEffect(() => {
     if (!loading) {
-      const isAuthRoute = pathname?.startsWith("/(auth)");
-      const isProtectedRoute = !pathname?.startsWith("/(auth)") && pathname !== "/";
+      // Define public routes that should be accessible without authentication
+      const publicRoutes = ['/', '/login', '/register', '/register2', '/register-new', '/public-register'];
+      const isPublicRoute = publicRoutes.includes(pathname || '');
+      
+      // Auth routes are for authentication flows (login/register)
+      const authRoutes = ['/login', '/register', '/register2', '/register-new', '/public-register'];
+      const isAuthRoute = authRoutes.includes(pathname || '');
+      
+      // Protected routes require authentication
+      const isProtectedRoute = !isPublicRoute;
       
       // Redirect unauthenticated users from protected routes to login
       if (isProtectedRoute && !user) {

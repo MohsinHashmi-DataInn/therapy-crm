@@ -36,6 +36,23 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   constructor() {
     this.logger.warn('Using MOCK PrismaService - For development only');
     this.logger.warn('Database operations will not persist between restarts');
+    
+    // Initialize with a default admin user for testing
+    this.users.push({
+      id: BigInt(1),
+      firstName: 'Admin',
+      lastName: 'User',
+      email: 'admin@example.com',
+      password: '$2b$10$ZSBGhrPDIf6bWF6YKxp9aeEbEr0BCMcz/FMZ4RJ2VJ.zUX.lQj5pW', // hashed 'Password123'
+      role: 'ADMIN',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: null,
+      createdBy: null,
+      updatedBy: null
+    });
+    
+    this.logger.log('Mock database initialized with default admin user');
   }
 
   async onModuleInit() {
@@ -95,6 +112,31 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return {
       findUnique: async ({ where }: any) => {
         this.logger.log(`Mock ${modelName}.findUnique called with: ${JSON.stringify(where)}`);
+        
+        // For user model, add enhanced mock handling to support auth flows
+        if (modelName === 'user' && where.email) {
+          const existingUser = dataStore.find((record: MockRecord) => 
+            record.email === where.email
+          );
+          
+          if (existingUser) {
+            this.logger.log(`Mock ${modelName}.findUnique found record with email: ${where.email}`);
+            return existingUser;
+          }
+        }
+        
+        // For ID lookups, try to find in our mock store
+        if (where.id) {
+          const existingRecord = dataStore.find((record: MockRecord) => 
+            record.id.toString() === where.id.toString()
+          );
+          
+          if (existingRecord) {
+            this.logger.log(`Mock ${modelName}.findUnique found record with id: ${where.id}`);
+            return existingRecord;
+          }
+        }
+        
         return null;
       },
       
@@ -110,10 +152,50 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       
       create: async ({ data }: any) => {
         this.logger.log(`Mock ${modelName}.create called with: ${JSON.stringify(data)}`);
-        const id = BigInt(Date.now());
-        const record: MockRecord = { id, ...data };
-        dataStore.push(record);
-        return record;
+        try {
+          // Generate a realistic mock ID
+          const id = BigInt(Date.now());
+          
+          // For user model, ensure default values match schema expectations
+          if (modelName === 'user') {
+            // Check for required fields
+            if (!data.email || !data.password || !data.firstName || !data.lastName) {
+              this.logger.error(`Mock ${modelName}.create missing required fields`);
+              throw new Error('Missing required fields for user creation');
+            }
+
+            // Check for email uniqueness
+            const existingUser = dataStore.find((record: MockRecord) => 
+              record.email === data.email
+            );
+            
+            if (existingUser) {
+              this.logger.error(`Mock ${modelName}.create email already exists: ${data.email}`);
+              throw new Error('Email already exists');
+            }
+            
+            // Create user with all necessary fields
+            const record: MockRecord = { 
+              id, 
+              ...data,
+              isActive: data.isActive !== undefined ? data.isActive : true,
+              createdAt: data.createdAt || new Date(),
+              updatedAt: data.updatedAt || null
+            };
+            dataStore.push(record);
+            this.logger.log(`Mock ${modelName} created successfully with id: ${id}`);
+            return record;
+          }
+          
+          // For other models
+          const record: MockRecord = { id, ...data };
+          dataStore.push(record);
+          this.logger.log(`Mock ${modelName} created successfully with id: ${id}`);
+          return record;
+        } catch (error: any) {
+          this.logger.error(`Error in mock ${modelName}.create: ${error.message}`);
+          throw error;
+        }
       },
       
       update: async ({ where, data }: any) => {

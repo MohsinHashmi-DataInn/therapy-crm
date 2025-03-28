@@ -76,7 +76,9 @@ export const useAuth = () => {
           variant: 'success',
         });
         
-        router.push('/dashboard');
+        // Use window.location for a full page navigation instead of Next.js router
+        // This ensures a complete page reload and proper auth context initialization
+        window.location.href = '/dashboard';
         return true;
       } catch (error: any) {
         const errorMessage = error.response?.data?.message || 'Login failed';
@@ -142,7 +144,9 @@ export const useAuth = () => {
       description: 'Logged out successfully',
       variant: 'success',
     });
-    router.push('/login');
+    // Use window.location for a full page navigation instead of Next.js router
+    // This ensures a complete page reload and proper auth context reset
+    window.location.href = '/login';
   }, [clearAuthData, toast, router]);
 
   /**

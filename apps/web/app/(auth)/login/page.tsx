@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 
 /**
  * Login form schema with validation
@@ -36,6 +37,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<LoginFormValues>({
@@ -48,32 +50,26 @@ export default function LoginPage() {
 
   /**
    * Handle form submission for login
-   * In a real implementation, this would validate credentials against the API
+   * Uses the auth context to authenticate and handle redirection
    */
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     
-    // In a real implementation, this would call the login API
     try {
-      // Mock successful login
-      console.log("Login attempt with:", data);
+      // Use the auth context login method for actual API authentication
+      const success = await login({ email: data.email, password: data.password });
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // For demo purposes, we'll accept any valid form input
-      toast({
-        title: "Success",
-        description: "You have successfully logged in",
-        variant: "success",
-      });
-      
-      // Redirect to dashboard after successful login
-      router.push("/dashboard");
+      if (success) {
+        // Auth provider will handle the redirection to dashboard
+        console.log("Login successful");
+      } else {
+        // Login method already shows toast errors
+        console.log("Login failed");
+      }
     } catch (error) {
       toast({
         title: "Error",
-        description: "Invalid email or password",
+        description: "An unexpected error occurred",
         variant: "destructive",
       });
     } finally {

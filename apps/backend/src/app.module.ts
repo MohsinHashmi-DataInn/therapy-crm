@@ -8,6 +8,7 @@ import { LearnerModule } from './modules/learner/learner.module';
 import { AppointmentModule } from './modules/appointment/appointment.module';
 import { CommunicationModule } from './modules/communication/communication.module';
 import { WaitlistModule } from './modules/waitlist/waitlist.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { WaitlistModule } from './modules/waitlist/waitlist.module';
     AppointmentModule,
     CommunicationModule,
     WaitlistModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

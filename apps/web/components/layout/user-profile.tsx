@@ -11,6 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/hooks/use-auth";
+import { User as UserType } from "@/lib/types";
 import { LogOut, Settings, User } from "lucide-react";
 
 /**
@@ -18,28 +20,38 @@ import { LogOut, Settings, User } from "lucide-react";
  * Provides user information and account-related actions
  */
 export function UserProfile() {
-  // This would be populated from auth context in a real implementation
-  const user = {
-    name: "John Doe",
-    email: "john.doe@example.com",
-    role: "Therapist",
-    imageUrl: "",
+  const { user: authUser, logout } = useAuth();
+
+  // Use authenticated user data if available, otherwise fall back to placeholder
+  const user = authUser || {
+    id: "",
+    email: "guest@example.com",
+    name: "Guest User",
+    role: "USER",
+    createdAt: "",
+    updatedAt: "",
   };
+
+  // Get name for display
+  const displayName = user.name || user.email;
+  
+  // Get initials for avatar
+  const initials = displayName.charAt(0).toUpperCase();
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-10 rounded-full">
           <Avatar className="h-10 w-10">
-            <AvatarImage src={user.imageUrl} alt={user.name} />
-            <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+            <AvatarImage src="" alt={displayName} />
+            <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel>
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{user.name}</p>
+            <p className="text-sm font-medium leading-none">{displayName}</p>
             <p className="text-xs leading-none text-muted-foreground">
               {user.email}
             </p>
@@ -60,7 +72,14 @@ export function UserProfile() {
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
+        <DropdownMenuItem 
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log("Logout clicked"); // Debug log
+            logout();
+          }}
+        >
           <LogOut className="mr-2 h-4 w-4" />
           <span>Log out</span>
         </DropdownMenuItem>
