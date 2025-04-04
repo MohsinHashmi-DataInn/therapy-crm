@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { PlusCircle, Calendar, Filter } from "lucide-react";
 import { format } from "date-fns";
 import { useAppointments } from "@/hooks/use-appointments";
+
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,18 +30,55 @@ export default function AppointmentsPage() {
   const [page, setPage] = useState(1);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [status, setStatus] = useState<AppointmentStatus | "">("");
+  
+  // Get the hook for appointments query
   const { useAppointmentsQuery } = useAppointments();
-
-  // Format the selected date for API query
-  const formattedDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : undefined;
-
+  
+  // Format the selected date safely
+  let formattedDate: string | undefined;
+  try {
+    formattedDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : undefined;
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    formattedDate = undefined;
+  }
+  
+  // Use the appointments query hook with safe parameter handling
   const { data, isLoading, isError } = useAppointmentsQuery(
-    page, 
+    page || 1, 
     10, 
     formattedDate, 
     formattedDate, 
-    status as AppointmentStatus | undefined
+    status ? (status as AppointmentStatus) : undefined
   );
+
+  // Early return for loading state to prevent accessing properties before data is available
+  if (isLoading) {
+    return (
+      <div className="container mx-auto py-10">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">Appointments</h1>
+        </div>
+        <div className="space-y-4">
+          <p>Loading appointments...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle error state
+  if (isError) {
+    return (
+      <div className="container mx-auto py-10">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">Appointments</h1>
+        </div>
+        <div className="space-y-4">
+          <p className="text-red-500">Error loading appointments. Please try again later.</p>
+        </div>
+      </div>
+    );
+  }
 
   // Get status badge color based on appointment status
   const getStatusColor = (status: AppointmentStatus) => {
@@ -138,24 +176,24 @@ export default function AppointmentsPage() {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-gray-500">Total:</span>
-                <span className="font-medium">{data?.meta.total || 0}</span>
+                <span className="font-medium">{data?.meta?.total || 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-500">Scheduled:</span>
                 <span className="font-medium">
-                  {data?.data.filter(a => a.status === "scheduled").length || 0}
+                  {data?.data && Array.isArray(data.data) ? data.data.filter((a: any) => a.status === "scheduled").length : 0}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-500">Completed:</span>
                 <span className="font-medium">
-                  {data?.data.filter(a => a.status === "completed").length || 0}
+                  {data?.data && Array.isArray(data.data) ? data.data.filter((a: any) => a.status === "completed").length : 0}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-500">Cancelled:</span>
                 <span className="font-medium">
-                  {data?.data.filter(a => a.status === "cancelled").length || 0}
+                  {data?.data && Array.isArray(data.data) ? data.data.filter((a: any) => a.status === "cancelled").length : 0}
                 </span>
               </div>
             </div>
@@ -192,14 +230,14 @@ export default function AppointmentsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data?.data.length === 0 ? (
+                  {!data?.data || !Array.isArray(data?.data) || data.data.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center py-8">
                         No appointments found for the selected filters.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    data?.data.map((appointment) => (
+                    data.data.map((appointment: any) => (
                       <TableRow key={appointment.id}>
                         <TableCell className="font-medium">
                           {appointment.client?.firstName} {appointment.client?.lastName}
@@ -238,10 +276,10 @@ export default function AppointmentsPage() {
                 </TableBody>
               </Table>
               
-              {data && data.meta.totalPages > 1 && (
+              {data?.data && Array.isArray(data.data) && data?.meta?.totalPages && data.meta.totalPages > 1 && (
                 <div className="flex items-center justify-between px-4 py-4 border-t">
                   <div className="text-sm text-gray-500">
-                    Showing {((page - 1) * 10) + 1} to {Math.min(page * 10, data.meta.total)} of {data.meta.total} appointments
+                    Showing {((page - 1) * 10) + 1} to {Math.min(page * 10, data.meta?.total || 0)} of {data.meta?.total || 0} appointments
                   </div>
                   <div className="flex space-x-2">
                     <Button 
@@ -255,8 +293,8 @@ export default function AppointmentsPage() {
                     <Button 
                       variant="outline" 
                       size="sm"
-                      disabled={page === data.meta.totalPages}
-                      onClick={() => setPage((prev) => Math.min(prev + 1, data.meta.totalPages))}
+                      disabled={page === data.meta?.totalPages}
+                      onClick={() => setPage((prev) => Math.min(prev + 1, data.meta?.totalPages || 1))}
                     >
                       Next
                     </Button>
