@@ -17,7 +17,7 @@ export class BillingService {
    * @returns {Promise<Partial<Practice>>} Selected billing fields from the practice.
    * @throws {NotFoundException} If the practice record is not found.
    */
-  async getBillingInfo(): Promise<Partial<Practice>> {
+  async getBillingInfo(): Promise<Partial<Practice> | object> {
     this.logger.log(`Fetching billing info for practice ID: ${this.practiceId}`);
     const practice = await this.prisma.practice.findUnique({
       where: { id: this.practiceId },
@@ -37,10 +37,16 @@ export class BillingService {
     });
 
     if (!practice) {
-      this.logger.error(`Practice not found with ID: ${this.practiceId}`);
-      throw new NotFoundException(
-        `Practice with ID ${this.practiceId} not found.`,
-      );
+      this.logger.warn(`Practice not found with ID: ${this.practiceId}. Returning empty template.`);
+      // Return an empty billing template instead of throwing an exception
+      return {
+        billingName: '',
+        billingEmail: '',
+        billingAddress: '',
+        billingCity: '',
+        billingState: '',
+        billingZipCode: ''
+      };
     }
     this.logger.log(`Successfully retrieved billing info for practice ID: ${this.practiceId}`);
     return practice;

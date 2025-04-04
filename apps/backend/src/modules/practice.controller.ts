@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, Put, Body, UseGuards, UsePipes, ValidationPipe, NotFoundException } from '@nestjs/common';
 import { PracticeService } from './practice.service';
 import { UpdatePracticeDto } from './dto/update-practice.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -17,11 +17,25 @@ export class PracticeController {
   @Get()
   @Roles(UserRole.ADMIN, UserRole.THERAPIST, UserRole.STAFF) 
   @ApiOperation({ summary: 'Get practice information' })
-  @ApiResponse({ status: 200, description: 'Practice information retrieved successfully.' }) 
-  @ApiResponse({ status: 404, description: 'Practice information not found.' })
+  @ApiResponse({ status: 200, description: 'Practice information retrieved successfully or empty object if not initialized.' }) 
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async getPracticeInfo(): Promise<Practice> {
-    return this.practiceService.getPracticeInfo();
+  async getPracticeInfo(): Promise<Practice | object> {
+    const practiceInfo = await this.practiceService.getPracticeInfo();
+    if (!practiceInfo) {
+      // Return an empty object instead of an error
+      return {
+        name: '',
+        address: '',
+        city: '',
+        state: '',
+        zipCode: '',
+        phone: '',
+        email: '',
+        website: '',
+        hoursOfOperation: ''
+      };
+    }
+    return practiceInfo;
   }
 
   @Put()

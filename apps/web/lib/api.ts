@@ -18,7 +18,9 @@ const api = axios.create({
  */
 api.interceptors.request.use(
   (config) => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    // Get token key from environment or use default
+    const tokenKey = process.env.NEXT_PUBLIC_TOKEN_KEY || 'auth_token';
+    const token = typeof window !== 'undefined' ? localStorage.getItem(tokenKey) : null;
     
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;

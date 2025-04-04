@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import api from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from './use-auth';
@@ -22,14 +22,15 @@ export interface SecuritySettings {
   newPassword: string;
   confirmPassword: string;
   twoFactorEnabled: boolean;
+  lastPasswordChange: Date;
 }
 
 export interface NotificationPreferences {
-  emailNotifications: boolean;
+  email: boolean;
+  push: boolean;
+  sms: boolean;
   appointmentReminders: boolean;
-  marketingEmails: boolean;
-  smsNotifications: boolean;
-  notificationLeadTime: number; // hours before appointment
+  marketingUpdates: boolean;
 }
 
 export interface PracticeInfo {
@@ -39,52 +40,65 @@ export interface PracticeInfo {
   state: string;
   zip: string;
   phone: string;
-  email: string;
   website?: string;
-  hoursOfOperation: {
-    monday: { open: string; close: string; closed: boolean };
-    tuesday: { open: string; close: string; closed: boolean };
-    wednesday: { open: string; close: string; closed: boolean };
-    thursday: { open: string; close: string; closed: boolean };
-    friday: { open: string; close: string; closed: boolean };
-    saturday: { open: string; close: string; closed: boolean };
-    sunday: { open: string; close: string; closed: boolean };
-  };
+  taxId?: string;
+  npi?: string;
 }
 
 export interface BillingInfo {
-  plan: 'basic' | 'professional' | 'enterprise';
+  planId: string;
+  planName: string;
   billingCycle: 'monthly' | 'annual';
-  cardNumber: string;
-  cardName: string;
-  expiryDate: string;
-  cvv: string;
-  billingAddress: string;
-  billingCity: string;
-  billingState: string;
-  billingZip: string;
-  billingCountry: string;
+  nextBillingDate: Date;
+  paymentMethod: {
+    type: 'card' | 'bank';
+    last4: string;
+    expiryDate?: string;
+  };
 }
 
+/**
+ * Hook for managing user settings and preferences
+ * Provides functions for fetching and updating various settings
+ */
 export const useSettings = () => {
-  const { user, token } = useAuth();
   const { toast } = useToast();
+  const { token, user } = useAuth();
   const [loading, setLoading] = useState<boolean>(false);
+  const [profileData, setProfileData] = useState<UserProfile | null>(null);
+  const requestInProgress = useRef<boolean>(false);
 
   // Fetch user profile
   const fetchUserProfile = useCallback(async (): Promise<UserProfile | null> => {
-    if (!token || !user) return null;
+    if (!token || !user) {
+      return null;
+    }
 
+    if (requestInProgress.current) {
+      return profileData;
+    }
+
+    if (profileData) {
+      return profileData; // Return existing data if already fetched
+    }
+
+    requestInProgress.current = true;
     setLoading(true);
+
     try {
-      const response = await api.get<UserProfile>('/users/profile');
+      const response = await api.get<UserProfile>('/auth/profile');
+      const data = response.data;
+      setProfileData(data);
       setLoading(false);
-      return response.data;
+      requestInProgress.current = false;
+      return data;
     } catch (error: any) {
+      console.error('API call failed:', error);
       setLoading(false);
+      requestInProgress.current = false;
       toast({
         title: 'Error',
-        description: 'Failed to load profile data',
+        description: error.response?.data?.message || 'Failed to load profile',
         variant: 'destructive',
       });
       return null;
@@ -93,11 +107,13 @@ export const useSettings = () => {
 
   // Update user profile
   const updateUserProfile = useCallback(async (profileData: UserProfile): Promise<boolean> => {
-    if (!token || !user) return false;
+    if (!token || !user) {
+      return false;
+    }
 
     setLoading(true);
     try {
-      await api.put('/users/profile', profileData);
+      await api.put('/auth/profile', profileData);
       setLoading(false);
       toast({
         title: 'Success',
@@ -106,6 +122,7 @@ export const useSettings = () => {
       });
       return true;
     } catch (error: any) {
+      console.error('API call failed:', error);
       setLoading(false);
       toast({
         title: 'Error',
@@ -117,24 +134,16 @@ export const useSettings = () => {
   }, [token, user, toast]);
 
   // Change password
-  const changePassword = useCallback(async (passwordData: Omit<SecuritySettings, 'twoFactorEnabled'>): Promise<boolean> => {
-    if (!token || !user) return false;
-    
-    // Validate password confirmation
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast({
-        title: 'Error',
-        description: 'New passwords do not match',
-        variant: 'destructive',
-      });
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<boolean> => {
+    if (!token || !user) {
       return false;
     }
 
     setLoading(true);
     try {
       await api.post('/auth/change-password', {
-        currentPassword: passwordData.currentPassword,
-        newPassword: passwordData.newPassword,
+        currentPassword,
+        newPassword,
       });
       setLoading(false);
       toast({
@@ -144,6 +153,7 @@ export const useSettings = () => {
       });
       return true;
     } catch (error: any) {
+      console.error('API call failed:', error);
       setLoading(false);
       toast({
         title: 'Error',
@@ -154,25 +164,28 @@ export const useSettings = () => {
     }
   }, [token, user, toast]);
 
-  // Update two-factor authentication status
-  const updateTwoFactorAuth = useCallback(async (enabled: boolean): Promise<boolean> => {
-    if (!token || !user) return false;
+  // Toggle two-factor authentication
+  const toggleTwoFactor = useCallback(async (enable: boolean): Promise<boolean> => {
+    if (!token || !user) {
+      return false;
+    }
 
     setLoading(true);
     try {
-      await api.put('/auth/two-factor', { enabled });
+      await api.post('/auth/two-factor', { enable });
       setLoading(false);
       toast({
         title: 'Success',
-        description: `Two-factor authentication ${enabled ? 'enabled' : 'disabled'} successfully`,
+        description: `Two-factor authentication ${enable ? 'enabled' : 'disabled'}`,
         variant: 'success',
       });
       return true;
     } catch (error: any) {
+      console.error('API call failed:', error);
       setLoading(false);
       toast({
         title: 'Error',
-        description: error.response?.data?.message || 'Failed to update two-factor authentication',
+        description: error.response?.data?.message || 'Failed to toggle two-factor authentication',
         variant: 'destructive',
       });
       return false;
@@ -181,7 +194,9 @@ export const useSettings = () => {
 
   // Fetch notification preferences
   const fetchNotificationPreferences = useCallback(async (): Promise<NotificationPreferences | null> => {
-    if (!token || !user) return null;
+    if (!token || !user) {
+      return null;
+    }
 
     setLoading(true);
     try {
@@ -189,10 +204,11 @@ export const useSettings = () => {
       setLoading(false);
       return response.data;
     } catch (error: any) {
+      console.error('API call failed:', error);
       setLoading(false);
       toast({
         title: 'Error',
-        description: 'Failed to load notification preferences',
+        description: error.response?.data?.message || 'Failed to load notification preferences',
         variant: 'destructive',
       });
       return null;
@@ -201,7 +217,9 @@ export const useSettings = () => {
 
   // Update notification preferences
   const updateNotificationPreferences = useCallback(async (preferences: NotificationPreferences): Promise<boolean> => {
-    if (!token || !user) return false;
+    if (!token || !user) {
+      return false;
+    }
 
     setLoading(true);
     try {
@@ -214,6 +232,7 @@ export const useSettings = () => {
       });
       return true;
     } catch (error: any) {
+      console.error('API call failed:', error);
       setLoading(false);
       toast({
         title: 'Error',
@@ -226,7 +245,9 @@ export const useSettings = () => {
 
   // Fetch practice information
   const fetchPracticeInfo = useCallback(async (): Promise<PracticeInfo | null> => {
-    if (!token || !user) return null;
+    if (!token || !user) {
+      return null;
+    }
 
     setLoading(true);
     try {
@@ -234,10 +255,11 @@ export const useSettings = () => {
       setLoading(false);
       return response.data;
     } catch (error: any) {
+      console.error('API call failed:', error);
       setLoading(false);
       toast({
         title: 'Error',
-        description: 'Failed to load practice information',
+        description: error.response?.data?.message || 'Failed to load practice information',
         variant: 'destructive',
       });
       return null;
@@ -246,7 +268,9 @@ export const useSettings = () => {
 
   // Update practice information
   const updatePracticeInfo = useCallback(async (practiceData: PracticeInfo): Promise<boolean> => {
-    if (!token || !user) return false;
+    if (!token || !user) {
+      return false;
+    }
 
     setLoading(true);
     try {
@@ -259,6 +283,7 @@ export const useSettings = () => {
       });
       return true;
     } catch (error: any) {
+      console.error('API call failed:', error);
       setLoading(false);
       toast({
         title: 'Error',
@@ -271,7 +296,9 @@ export const useSettings = () => {
 
   // Fetch billing information
   const fetchBillingInfo = useCallback(async (): Promise<BillingInfo | null> => {
-    if (!token || !user) return null;
+    if (!token || !user) {
+      return null;
+    }
 
     setLoading(true);
     try {
@@ -279,10 +306,11 @@ export const useSettings = () => {
       setLoading(false);
       return response.data;
     } catch (error: any) {
+      console.error('API call failed:', error);
       setLoading(false);
       toast({
         title: 'Error',
-        description: 'Failed to load billing information',
+        description: error.response?.data?.message || 'Failed to load billing information',
         variant: 'destructive',
       });
       return null;
@@ -291,7 +319,9 @@ export const useSettings = () => {
 
   // Update billing information
   const updateBillingInfo = useCallback(async (billingData: BillingInfo): Promise<boolean> => {
-    if (!token || !user) return false;
+    if (!token || !user) {
+      return false;
+    }
 
     setLoading(true);
     try {
@@ -304,6 +334,7 @@ export const useSettings = () => {
       });
       return true;
     } catch (error: any) {
+      console.error('API call failed:', error);
       setLoading(false);
       toast({
         title: 'Error',
@@ -316,7 +347,9 @@ export const useSettings = () => {
 
   // Get subscription plans
   const getSubscriptionPlans = useCallback(async () => {
-    if (!token || !user) return [];
+    if (!token || !user) {
+      return [];
+    }
 
     setLoading(true);
     try {
@@ -324,10 +357,11 @@ export const useSettings = () => {
       setLoading(false);
       return response.data.plans;
     } catch (error: any) {
+      console.error('API call failed:', error);
       setLoading(false);
       toast({
         title: 'Error',
-        description: 'Failed to load subscription plans',
+        description: error.response?.data?.message || 'Failed to load subscription plans',
         variant: 'destructive',
       });
       return [];
@@ -336,11 +370,13 @@ export const useSettings = () => {
 
   // Change subscription plan
   const changeSubscriptionPlan = useCallback(async (planId: string, billingCycle: 'monthly' | 'annual'): Promise<boolean> => {
-    if (!token || !user) return false;
+    if (!token || !user) {
+      return false;
+    }
 
     setLoading(true);
     try {
-      await api.post('/billing/change-plan', { planId, billingCycle });
+      await api.post('/billing/subscribe', { planId, billingCycle });
       setLoading(false);
       toast({
         title: 'Success',
@@ -349,6 +385,7 @@ export const useSettings = () => {
       });
       return true;
     } catch (error: any) {
+      console.error('API call failed:', error);
       setLoading(false);
       toast({
         title: 'Error',
@@ -361,19 +398,15 @@ export const useSettings = () => {
 
   return {
     loading,
-    // Account settings
+    profileData,
     fetchUserProfile,
     updateUserProfile,
-    // Security settings
     changePassword,
-    updateTwoFactorAuth,
-    // Notification settings
+    toggleTwoFactor,
     fetchNotificationPreferences,
     updateNotificationPreferences,
-    // Practice settings
     fetchPracticeInfo,
     updatePracticeInfo,
-    // Billing settings
     fetchBillingInfo,
     updateBillingInfo,
     getSubscriptionPlans,

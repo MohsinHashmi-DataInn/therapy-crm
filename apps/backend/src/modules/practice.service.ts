@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service'; 
 import { Practice } from '@prisma/client';
 import { UpdatePracticeDto } from './dto/update-practice.dto';
@@ -14,20 +14,18 @@ export class PracticeService {
   /**
    * Retrieves the practice information.
    * Assumes there is only one practice record (ID: 1).
-   * @returns {Promise<Practice>} The practice details.
-   * @throws {NotFoundException} If the practice record is not found.
+   * @returns {Promise<Practice | null>} The practice details or null if not found.
    */
-  async getPracticeInfo(): Promise<Practice> {
+  async getPracticeInfo(): Promise<Practice | null> {
     this.logger.log(`Fetching practice info for ID: ${this.practiceId}`);
     const practice = await this.prisma.practice.findUnique({
       where: { id: this.practiceId },
     });
 
     if (!practice) {
-      this.logger.warn(`Practice information not found for ID: ${this.practiceId}. Consider initializing.`);
-      // You might want to return a default object or create one if it doesn't exist.
-      // For now, we throw an error.
-      throw new NotFoundException(`Practice information not found. Please ensure it is initialized.`);
+      this.logger.warn(`Practice information not found for ID: ${this.practiceId}. Returning null.`);
+      // Return null instead of throwing an error
+      return null; 
     }
     return practice;
   }

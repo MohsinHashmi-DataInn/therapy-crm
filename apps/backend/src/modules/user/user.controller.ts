@@ -13,11 +13,13 @@ import {
   InternalServerErrorException,
   ParseIntPipe,
   Headers,
+  Put,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 
 // Auth imports
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -141,6 +143,48 @@ export class UserController {
     
     // Ensure at least an empty array is returned, not undefined or null
     return users || [];
+  }
+
+  /**
+   * Get current user's notification preferences
+   */
+  @Get('notification-preferences')
+  @ApiOperation({ summary: "Get the current user's notification preferences" })
+  @ApiResponse({ status: 200, description: 'Notification preferences found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getNotificationPreferences(@Request() req: RequestWithUser) {
+    try {
+      const userId = BigInt(req.user.id);
+      // TODO: Implement the actual fetching logic in UserService
+      // For now, returning a placeholder
+      // Replace NotificationPreferences with the actual DTO/interface later
+      return await this.userService.getNotificationPreferences(userId);
+    } catch (error: any) {
+      console.error('Error getting notification preferences:', error);
+      throw new InternalServerErrorException('Failed to get notification preferences');
+    }
+  }
+
+  /**
+   * Update current user's notification preferences
+   */
+  @Put('notification-preferences') // Use Put for updating the whole resource
+  @ApiOperation({ summary: "Update the current user's notification preferences" })
+  @ApiResponse({ status: 200, description: 'Notification preferences updated successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid data provided' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({ type: UpdateNotificationPreferencesDto })
+  async updateNotificationPreferences(@Request() req: RequestWithUser, @Body() preferencesData: UpdateNotificationPreferencesDto) { 
+    try {
+      const userId = BigInt(req.user.id);
+      // TODO: Implement the actual update logic in UserService
+      // Replace 'any' with the actual NotificationPreferences DTO/interface
+      return await this.userService.updateNotificationPreferences(userId, preferencesData);
+    } catch (error: any) {
+      console.error('Error updating notification preferences:', error);
+      // Add specific error handling (e.g., validation errors) if needed
+      throw new InternalServerErrorException('Failed to update notification preferences');
+    }
   }
 
   /**

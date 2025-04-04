@@ -148,7 +148,7 @@ export function PracticeSettings() {
           <CardTitle>Error Loading Practice Information</CardTitle>
           <CardDescription className="text-destructive">
             Failed to load practice details. Please try again later.
-            {loadingError?.message && <p>Details: {loadingError.message}</p>}
+            {loadingError?.message && ` Details: ${loadingError.message}`}
           </CardDescription>
         </CardHeader>
       </Card>

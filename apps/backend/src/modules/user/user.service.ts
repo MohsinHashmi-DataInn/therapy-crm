@@ -2,9 +2,9 @@ import { ConflictException, Injectable, Logger, NotFoundException } from '@nestj
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from './entities/user.entity';
+import { User, UserRole, NotificationPreference } from '@prisma/client';
+import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 import * as bcrypt from 'bcrypt';
-import { UserRole } from '@prisma/client';
 
 // Define a type for serialized user (with ID as string instead of BigInt)
 export type SerializedUser = Omit<User, 'password' | 'id' | 'createdBy' | 'updatedBy'> & {
@@ -240,5 +240,60 @@ export class UserService {
       createdBy: userWithoutPassword.createdBy?.toString() || null,
       updatedBy: userWithoutPassword.updatedBy?.toString() || null
     };
+  }
+
+  /**
+   * Get notification preferences for a user
+   * @param userId - The ID of the user
+   * @returns Notification preferences object
+   */
+  async getNotificationPreferences(userId: bigint): Promise<NotificationPreference | null> {
+    this.logger.log(`Fetching notification preferences for user ID: ${userId}`);
+    // TODO: Implement database logic to retrieve preferences based on userId
+    // Example placeholder implementation:
+    const preferences = await this.prismaService.notificationPreference.findUnique({ // Assuming a model named NotificationPreference
+      where: { userId: userId },
+    });
+
+    if (!preferences) {
+      this.logger.warn(`Notification preferences not found for user ID: ${userId}. Returning null.`);
+      // Return null if not found, controller can decide default behavior if needed
+      return null;
+      // Alternative: return default preferences
+      /* return {
+        id: BigInt(0), // Placeholder ID
+        userId: userId,
+        emailNotifications: true, 
+        smsNotifications: false, 
+        pushNotifications: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }; */
+    }
+    return preferences;
+  }
+
+  /**
+   * Update notification preferences for a user
+   * @param userId - The ID of the user
+   * @param preferencesData - The new preferences data
+   * @returns The updated preferences object
+   */
+  async updateNotificationPreferences(
+    userId: bigint, 
+    preferencesData: UpdateNotificationPreferencesDto
+  ): Promise<NotificationPreference> {
+    this.logger.log(`Updating notification preferences for user ID: ${userId}`);
+    // TODO: Add validation for preferencesData (already handled by DTO)
+    // TODO: Implement database logic to update or create preferences
+    // Example placeholder implementation (upsert):
+    const updatedPreferences = await this.prismaService.notificationPreference.upsert({
+      where: { userId: userId },
+      update: { ...preferencesData, userId }, // Ensure userId is included if needed for update
+      create: { ...preferencesData, userId }, // Ensure userId is linked on creation
+    });
+
+    this.logger.log(`Notification preferences updated successfully for user ID: ${userId}`);
+    return updatedPreferences;
   }
 }

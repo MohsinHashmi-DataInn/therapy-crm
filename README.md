@@ -14,6 +14,10 @@ Therapy CRM is a full-stack application built with a modern tech stack to stream
 - **Communication Tracking**: Log and monitor all client communications
 - **User Authentication**: Role-based access control for therapists, admins, and staff
 - **Dashboard Analytics**: Monitor practice performance with insightful metrics
+- **Practice Settings**: Manage practice information, details, and configurations
+- **Billing Management**: Handle billing information, addresses, and payment details
+- **Notification Preferences**: Configure personalized notification settings for different events
+- **Role-Based Access**: Different functionality available to Admin, Therapist, and Staff users
 
 ## Tech Stack
 
@@ -110,8 +114,93 @@ The backend provides RESTful API endpoints for all resources:
 - `/api/waitlist` - Waitlist management
 - `/api/communications` - Communication tracking
 - `/api/auth` - Authentication and user management
+- `/api/practice` - Practice information management
+- `/api/billing` - Billing details and management
+- `/api/users` - User management and notification preferences
+- `/api/health` - API health monitoring
 
 For full API documentation, visit the Swagger UI at `/api/docs` when the backend is running.
+
+## Data Models
+
+### User
+- `id`: Unique identifier
+- `email`: User email address (unique)
+- `password`: Encrypted password
+- `firstName`, `lastName`: User name
+- `phone`: Contact number
+- `role`: ADMIN, THERAPIST, or STAFF
+- `isActive`: Account status
+- `createdAt`, `updatedAt`: Timestamps
+- `notificationPreference`: Related preferences
+
+### Client
+- `id`: Unique identifier
+- `firstName`, `lastName`: Client name
+- `email`: Client email (optional, unique)
+- `phone`: Contact number
+- `address`: Physical address
+- `status`: ACTIVE, INACTIVE, ARCHIVED, or WAITLIST
+- `priority`: LOW, MEDIUM, or HIGH
+- `notes`: Additional information
+- `therapistId`: Assigned therapist
+- `createdAt`, `updatedAt`: Timestamps
+
+### Appointment
+- `id`: Unique identifier
+- `title`: Appointment title
+- `startTime`, `endTime`: Schedule times
+- `status`: SCHEDULED, CONFIRMED, COMPLETED, CANCELLED, or NOSHOW
+- `location`: Appointment location
+- `notes`: Additional information
+- `clientId`: Associated client
+- `learnerId`: Associated learner (optional)
+- `therapistId`: Assigned therapist
+- `cancellationReason`: Reason if cancelled
+- `createdAt`, `updatedAt`: Timestamps
+
+### Communication
+- `id`: Unique identifier
+- `type`: EMAIL, PHONE, INPERSON, VIDEO, or SMS
+- `subject`: Communication subject
+- `content`: Message content
+- `sentAt`: Timestamp of sending
+- `notes`: Additional information
+- `clientId`: Associated client
+- `learnerId`: Associated learner (optional)
+- `appointmentId`: Related appointment (optional)
+- `userId`: Sending user (optional)
+- `createdAt`, `updatedAt`: Timestamps
+
+### Waitlist
+- `id`: Unique identifier
+- `serviceType`: THERAPY, ASSESSMENT, or CONSULTATION
+- `status`: WAITING, PLACED, or CANCELLED
+- `requestDate`: Date of request
+- `preferredSchedule`: Preferred timing
+- `notes`: Additional information
+- `clientId`: Associated client
+- `createdAt`, `updatedAt`: Timestamps
+
+### Practice
+- `id`: Unique identifier
+- `name`: Practice name
+- `address`, `city`, `state`, `zipCode`: Practice location
+- `phone`, `email`, `website`: Contact information
+- `hoursOfOperation`: Business hours
+- `billingName`, `billingEmail`: Billing contact
+- `billingAddress`, `billingCity`, `billingState`, `billingZipCode`: Billing address
+- `stripeCustomerId`, `stripeSubscriptionId`: Payment integration
+- `subscriptionStatus`: Subscription status
+- `createdAt`, `updatedAt`: Timestamps
+
+### NotificationPreference
+- `id`: Unique identifier
+- `userId`: Associated user
+- `emailNotifications`: Email notification toggle
+- `smsNotifications`: SMS notification toggle
+- `pushNotifications`: Push notification toggle
+- `createdAt`, `updatedAt`: Timestamps
 
 ## License
 

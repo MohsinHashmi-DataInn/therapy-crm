@@ -55,7 +55,7 @@ export function NotificationSettings() {
     };
 
     loadPreferences();
-  }, [fetchNotificationPreferences, form]);
+  }, []);
 
   // Handle form submission
   const onSubmit = async (data: NotificationPreferences) => {

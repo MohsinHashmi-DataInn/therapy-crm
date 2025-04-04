@@ -37,13 +37,12 @@ export class BillingController {
   @ApiOperation({ summary: 'Get billing information for the practice' })
   @ApiResponse({
     status: 200,
-    description: 'Successfully retrieved billing information.',
+    description: 'Successfully retrieved billing information or empty template if not yet created.',
     type: UpdateBillingDto, 
   })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
-  @ApiResponse({ status: 404, description: 'Practice not found.' })
-  async getBillingInfo(): Promise<Partial<Practice>> {
+  async getBillingInfo(): Promise<Partial<Practice> | object> {
     this.logger.log('Received request to get billing info');
     return this.billingService.getBillingInfo();
   }

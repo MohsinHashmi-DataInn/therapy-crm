@@ -59,7 +59,7 @@ export function AccountSettings() {
     };
 
     loadProfile();
-  }, [fetchUserProfile, form]);
+  }, []);
 
   // Handle form submission
   const onSubmit = async (data: UserProfile) => {

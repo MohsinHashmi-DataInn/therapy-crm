@@ -1,9 +1,9 @@
 import axios from 'axios';
 
-// Determine the base URL based on the environment
-// In development, it might point to your NestJS backend locally.
+// Determine the base URL based on the environment variable in .env.local
+// In development, it points to your NestJS backend locally (http://localhost:5000/api).
 // In production, it should point to your deployed backend API URL.
-const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001/api'; // Default to localhost:3001/api
+const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 const apiClient = axios.create({
   baseURL: baseURL,
@@ -18,8 +18,9 @@ const apiClient = axios.create({
 // Optional: Add a request interceptor to include the JWT token
 apiClient.interceptors.request.use(
   (config) => {
-    // Assuming you store the token in localStorage or manage it via context/state
-    const token = localStorage.getItem('accessToken'); // Adjust based on where you store the token
+    // Get token from localStorage using the key specified in .env.local
+    const tokenKey = process.env.NEXT_PUBLIC_TOKEN_KEY || 'auth_token';
+    const token = localStorage.getItem(tokenKey);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

@@ -38,6 +38,7 @@ model User {
   updatedUsers          User[]          @relation("UserUpdatedBy")
   createdWaitlists      Waitlist[]      @relation("WaitlistCreatedBy")
   updatedWaitlists      Waitlist[]      @relation("WaitlistUpdatedBy")
+  notificationPreference NotificationPreference?
 
   @@map("users")
 }
@@ -188,6 +189,19 @@ model Practice {
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@map("practice")
+}
+
+model NotificationPreference {
+  id                 BigInt    @id @default(autoincrement())
+  userId             BigInt    @unique @map("user_id") // Foreign key linking to User
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade) // Relation field
+  emailNotifications Boolean   @default(true) @map("email_notifications")
+  smsNotifications   Boolean   @default(false) @map("sms_notifications")
+  pushNotifications  Boolean   @default(false) @map("push_notifications")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@map("notification_preferences")
 }
 
 enum UserRole {
