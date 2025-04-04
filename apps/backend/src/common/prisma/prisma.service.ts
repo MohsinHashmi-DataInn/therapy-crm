@@ -34,6 +34,11 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   public learner = this.createModelProxy('learner');
 
   constructor() {
+    // Add BigInt serialization support for JSON
+    (BigInt.prototype as any).toJSON = function() {
+      return this.toString();
+    };
+    
     this.logger.warn('Using MOCK PrismaService - For development only');
     this.logger.warn('Database operations will not persist between restarts');
     
@@ -43,7 +48,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       firstName: 'Admin',
       lastName: 'User',
       email: 'admin@example.com',
-      password: '$2b$10$ZSBGhrPDIf6bWF6YKxp9aeEbEr0BCMcz/FMZ4RJ2VJ.zUX.lQj5pW', // hashed 'Password123'
+      password: '$2b$10$ZSBGhrPDIf6bWF6YKxp9aeEbEr0BCMcz/FMZ4RJ2VJ.zUX.lQj5pW', // hashed 'Admin123!'
       role: 'ADMIN',
       isActive: true,
       createdAt: new Date(),
@@ -52,7 +57,22 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       updatedBy: null
     });
     
-    this.logger.log('Mock database initialized with default admin user');
+    // Add a staff user for testing
+    this.users.push({
+      id: BigInt(2),
+      firstName: 'Staff',
+      lastName: 'User',
+      email: 'staff@example.com',
+      password: '$2b$10$ZSBGhrPDIf6bWF6YKxp9aeEbEr0BCMcz/FMZ4RJ2VJ.zUX.lQj5pW', // hashed 'Staff123!'
+      role: 'STAFF',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: null,
+      createdBy: null,
+      updatedBy: null
+    });
+    
+    this.logger.log('Mock database initialized with default admin and staff users');
   }
 
   async onModuleInit() {

@@ -7,20 +7,22 @@ import { UpdateCommunicationDto } from './dto/update-communication.dto';
 export interface Communication {
   id: bigint;
   type: string;
-  subject?: string;
+  subject: string;
   content: string;
   sentAt: Date;
-  deliveryStatus?: string;
   notes?: string;
-  recipientId: bigint;
-  senderId: bigint;
-  clientId?: bigint;
+  clientId: bigint;
   learnerId?: bigint | null;
   appointmentId?: bigint | null;
+  userId?: bigint | null;
   createdAt: Date;
   updatedAt?: Date;
-  createdBy?: bigint;
+  createdBy?: bigint | null;
   updatedBy?: bigint | null;
+  client?: any;
+  learner?: any;
+  appointment?: any;
+  user?: any;
 }
 
 /**
@@ -37,80 +39,94 @@ export class CommunicationService {
    * @returns The created communication
    */
   async create(createCommunicationDto: CreateCommunicationDto, userId: bigint): Promise<Communication> {
-    // Verify client exists
-    const client = await this.prismaService.client.findUnique({
-      where: { id: BigInt(createCommunicationDto.clientId) },
-    });
-
-    if (!client) {
-      throw new NotFoundException(`Client with ID ${createCommunicationDto.clientId} not found`);
-    }
-
-    // Prepare learner ID if provided
-    let learnerId: bigint | null = null;
-    if (createCommunicationDto.learnerId) {
-      learnerId = BigInt(createCommunicationDto.learnerId);
-      // Verify learner exists
-      const learner = await this.prismaService.learner.findUnique({
-        where: { id: learnerId },
+    try {
+      // Verify client exists
+      const clientId = BigInt(createCommunicationDto.clientId);
+      const client = await this.prismaService.client.findUnique({
+        where: { id: clientId },
       });
 
-      if (!learner) {
-        throw new NotFoundException(`Learner with ID ${createCommunicationDto.learnerId} not found`);
+      if (!client) {
+        throw new NotFoundException(`Client with ID ${createCommunicationDto.clientId} not found`);
       }
-    }
 
-    // Prepare appointment ID if provided
-    let appointmentId: bigint | null = null;
-    if (createCommunicationDto.appointmentId) {
-      appointmentId = BigInt(createCommunicationDto.appointmentId);
-      // Verify appointment exists
-      const appointment = await this.prismaService.appointment.findUnique({
-        where: { id: appointmentId },
+      // Prepare learner ID if provided
+      let learnerId: bigint | null = null;
+      if (createCommunicationDto.learnerId) {
+        learnerId = BigInt(createCommunicationDto.learnerId);
+        // Verify learner exists
+        const learner = await this.prismaService.learner.findUnique({
+          where: { id: learnerId },
+        });
+
+        if (!learner) {
+          throw new NotFoundException(`Learner with ID ${createCommunicationDto.learnerId} not found`);
+        }
+      }
+
+      // Prepare appointment ID if provided
+      let appointmentId: bigint | null = null;
+      if (createCommunicationDto.appointmentId) {
+        appointmentId = BigInt(createCommunicationDto.appointmentId);
+        // Verify appointment exists
+        const appointment = await this.prismaService.appointment.findUnique({
+          where: { id: appointmentId },
+        });
+
+        if (!appointment) {
+          throw new NotFoundException(`Appointment with ID ${createCommunicationDto.appointmentId} not found`);
+        }
+      }
+
+      // Get sentAt date, default to current date if not provided
+      const sentAt = createCommunicationDto.sentAt ? new Date(createCommunicationDto.sentAt) : new Date();
+
+      // Create the communication
+      const communication = await this.prismaService.communication.create({
+        data: {
+          type: createCommunicationDto.type,
+          subject: createCommunicationDto.subject,
+          content: createCommunicationDto.content,
+          sentAt,
+          notes: createCommunicationDto.notes,
+          clientId,
+          learnerId,
+          appointmentId,
+          createdBy: userId,
+          userId: userId // Set the user who created the communication
+        },
+        include: {
+          client: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              phone: true,
+            },
+          },
+          learner: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
       });
 
-      if (!appointment) {
-        throw new NotFoundException(`Appointment with ID ${createCommunicationDto.appointmentId} not found`);
+      return communication as unknown as Communication;
+    } catch (error: unknown) {
+      if (error instanceof NotFoundException) {
+        throw error;
       }
+      // Handle BigInt conversion errors
+      if (error instanceof Error && error.message.includes('BigInt')) {
+        throw new Error(`Invalid ID format: ${error.message}`);
+      }
+      // Handle other errors
+      throw new Error(`Failed to create communication: ${error instanceof Error ? error.message : String(error)}`);
     }
-
-    // Get sentAt date, default to current date if not provided
-    const sentAt = createCommunicationDto.sentAt ? new Date(createCommunicationDto.sentAt) : new Date();
-
-    // Create the communication
-    const communication = await this.prismaService.communication.create({
-      data: {
-        type: createCommunicationDto.type,
-        subject: createCommunicationDto.subject,
-        content: createCommunicationDto.content,
-        sentAt,
-        notes: createCommunicationDto.notes,
-        clientId: BigInt(createCommunicationDto.clientId),
-        learnerId,
-        appointmentId,
-        createdBy: userId,
-      },
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
-        learner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    }) as unknown as Communication;
-
-    return communication;
   }
 
   /**
@@ -166,38 +182,46 @@ export class CommunicationService {
 
   /**
    * Find a communication by ID
-   * @param id - Communication ID
-   * @returns The found communication
+   * @param id Communication ID
+   * @returns Communication record
    */
   async findOne(id: bigint): Promise<Communication> {
-    const communication = await this.prismaService.communication.findUnique({
-      where: { id },
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
+    try {
+      const communication = await this.prismaService.communication.findUnique({
+        where: { id },
+        include: {
+          client: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              phone: true,
+            },
           },
-        },
-        learner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
+          learner: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
           },
+          appointment: true
         },
-        appointment: true,
-      },
-    });
-
-    if (!communication) {
-      throw new NotFoundException(`Communication with ID ${id} not found`);
+      });
+      if (!communication) {
+        throw new NotFoundException(`Communication with ID ${id} not found`);
+      }
+      return communication as unknown as Communication;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      } else if (error instanceof Error) {
+        throw new Error(`Failed to find communication: ${error.message}`);
+      } else {
+        throw new Error('Failed to find communication due to an unknown error');
+      }
     }
-
-    return communication as unknown as Communication;
   }
 
   /**
@@ -212,120 +236,154 @@ export class CommunicationService {
     updateCommunicationDto: UpdateCommunicationDto,
     userId: bigint
   ): Promise<Communication> {
-    // Verify communication exists
-    await this.findOne(id);
+    try {
+      // Verify communication exists
+      await this.findOne(id);
 
-    // Prepare update data
-    const updateData: any = { ...updateCommunicationDto };
+      // Prepare update data
+      const updateData: Record<string, any> = {};
 
-    // Handle client ID conversion if provided
-    if (updateCommunicationDto.clientId) {
-      updateData.clientId = BigInt(updateCommunicationDto.clientId);
-      
-      // Verify client exists
-      const client = await this.prismaService.client.findUnique({
-        where: { id: updateData.clientId },
+      // Only add fields that are present in the DTO to avoid undefined values
+      if (updateCommunicationDto.type !== undefined) {
+        updateData.type = updateCommunicationDto.type;
+      }
+
+      if (updateCommunicationDto.subject !== undefined) {
+        updateData.subject = updateCommunicationDto.subject;
+      }
+
+      if (updateCommunicationDto.content !== undefined) {
+        updateData.content = updateCommunicationDto.content;
+      }
+
+      if (updateCommunicationDto.notes !== undefined) {
+        updateData.notes = updateCommunicationDto.notes;
+      }
+
+      // Handle client ID conversion if provided
+      if (updateCommunicationDto.clientId) {
+        const clientId = BigInt(updateCommunicationDto.clientId);
+        
+        // Verify client exists
+        const client = await this.prismaService.client.findUnique({
+          where: { id: clientId },
+        });
+
+        if (!client) {
+          throw new NotFoundException(`Client with ID ${updateCommunicationDto.clientId} not found`);
+        }
+        
+        updateData.clientId = clientId;
+      }
+
+      // Handle learner ID conversion if provided
+      if (updateCommunicationDto.learnerId !== undefined) {
+        updateData.learnerId = updateCommunicationDto.learnerId 
+          ? BigInt(updateCommunicationDto.learnerId) 
+          : null;
+        
+        if (updateData.learnerId) {
+          // Verify learner exists
+          const learner = await this.prismaService.learner.findUnique({
+            where: { id: updateData.learnerId },
+          });
+
+          if (!learner) {
+            throw new NotFoundException(`Learner with ID ${updateCommunicationDto.learnerId} not found`);
+          }
+        }
+      }
+
+      // Handle appointment ID conversion if provided
+      if (updateCommunicationDto.appointmentId !== undefined) {
+        updateData.appointmentId = updateCommunicationDto.appointmentId 
+          ? BigInt(updateCommunicationDto.appointmentId) 
+          : null;
+        
+        if (updateData.appointmentId) {
+          // Verify appointment exists
+          const appointment = await this.prismaService.appointment.findUnique({
+            where: { id: updateData.appointmentId },
+          });
+
+          if (!appointment) {
+            throw new NotFoundException(`Appointment with ID ${updateCommunicationDto.appointmentId} not found`);
+          }
+        }
+      }
+
+      // Handle sentAt date conversion if provided
+      if (updateCommunicationDto.sentAt) {
+        updateData.sentAt = new Date(updateCommunicationDto.sentAt);
+      }
+
+      // Always set the updatedBy field
+      updateData.updatedBy = userId;
+
+      // Update the communication
+      const updatedCommunication = await this.prismaService.communication.update({
+        where: { id },
+        data: updateData,
+        include: {
+          client: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              phone: true,
+            },
+          },
+          learner: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
       });
 
-      if (!client) {
-        throw new NotFoundException(`Client with ID ${updateCommunicationDto.clientId} not found`);
+      return updatedCommunication as unknown as Communication;
+    } catch (error: unknown) {
+      if (error instanceof NotFoundException) {
+        throw error;
       }
-    }
-
-    // Handle learner ID conversion if provided
-    if (updateCommunicationDto.learnerId !== undefined) {
-      updateData.learnerId = updateCommunicationDto.learnerId 
-        ? BigInt(updateCommunicationDto.learnerId) 
-        : null;
-      
-      if (updateData.learnerId) {
-        // Verify learner exists
-        const learner = await this.prismaService.learner.findUnique({
-          where: { id: updateData.learnerId },
-        });
-
-        if (!learner) {
-          throw new NotFoundException(`Learner with ID ${updateCommunicationDto.learnerId} not found`);
-        }
+      // Handle BigInt conversion errors
+      if (error instanceof Error && error.message.includes('BigInt')) {
+        throw new Error(`Invalid ID format: ${error.message}`);
       }
+      // Handle other errors
+      throw new Error(`Failed to update communication: ${error instanceof Error ? error.message : String(error)}`);
     }
-
-    // Handle appointment ID conversion if provided
-    if (updateCommunicationDto.appointmentId !== undefined) {
-      updateData.appointmentId = updateCommunicationDto.appointmentId 
-        ? BigInt(updateCommunicationDto.appointmentId) 
-        : null;
-      
-      if (updateData.appointmentId) {
-        // Verify appointment exists
-        const appointment = await this.prismaService.appointment.findUnique({
-          where: { id: updateData.appointmentId },
-        });
-
-        if (!appointment) {
-          throw new NotFoundException(`Appointment with ID ${updateCommunicationDto.appointmentId} not found`);
-        }
-      }
-    }
-
-    // Handle sentAt date conversion if provided
-    if (updateCommunicationDto.sentAt) {
-      updateData.sentAt = new Date(updateCommunicationDto.sentAt);
-    }
-
-    // Update the communication
-    const updatedCommunication = await this.prismaService.communication.update({
-      where: { id },
-      data: {
-        ...updateData,
-        updatedBy: userId,
-      },
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
-        learner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    }) as unknown as Communication;
-
-    return updatedCommunication;
   }
 
   /**
    * Remove a communication
-   * @param id - Communication ID
-   * @returns The removed communication
+   * @param id Communication ID
    */
-  async remove(id: bigint): Promise<Communication> {
-    // Verify communication exists
-    await this.findOne(id);
+  async remove(id: bigint): Promise<void> {
+    try {
+      // Check if the communication exists before trying to delete it
+      const communication = await this.prismaService.communication.findUnique({
+        where: { id },
+      });
 
-    // Delete the communication
-    const deletedCommunication = await this.prismaService.communication.delete({
-      where: { id },
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          }
-        }
+      if (!communication) {
+        throw new NotFoundException(`Communication with ID ${id} not found`);
       }
-    }) as unknown as Communication;
 
-    return deletedCommunication;
+      await this.prismaService.communication.delete({
+        where: { id },
+      });
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      } else if (error instanceof Error) {
+        throw new Error(`Failed to delete communication: ${error.message}`);
+      } else {
+        throw new Error('Failed to delete communication due to an unknown error');
+      }
+    }
   }
 }

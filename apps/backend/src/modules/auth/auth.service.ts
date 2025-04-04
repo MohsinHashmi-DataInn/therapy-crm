@@ -1,8 +1,9 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, Logger, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../user/user.service';
 import { LoginDto } from './dto/login.dto';
 import { CreateUserDto } from '../user/dto/create-user.dto';
+import { JwtPayload } from './strategies/jwt.strategy';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -10,10 +11,14 @@ import * as bcrypt from 'bcrypt';
  */
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+  
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
-  ) {}
+  ) {
+    this.logger.log('Auth service initialized');
+  }
 
   /**
    * Register a new user
@@ -21,46 +26,46 @@ export class AuthService {
    * @returns The created user without password and a JWT token
    */
   async register(createUserDto: CreateUserDto) {
+    this.logger.log(`Processing registration request for email: ${createUserDto.email}`);
+    
     try {
-      console.log('AuthService.register - Processing registration request:', createUserDto.email);
-      
       // Create user in the database
       const user = await this.userService.create(createUserDto);
-      
-      console.log('AuthService.register - User created successfully');
+      this.logger.log(`User created successfully with ID: ${user.id.toString()}`);
       
       // Generate JWT payload
-      const payload = {
+      const payload: JwtPayload = {
         sub: user.id.toString(),
         email: user.email,
         role: user.role,
       };
       
+      const token = this.jwtService.sign(payload);
+      this.logger.debug(`JWT token generated for user: ${user.email}`);
+      
       // Return token and user info - convert BigInt to string
       return {
-        accessToken: this.jwtService.sign(payload),
+        accessToken: token,
         user: {
-          id: user.id.toString(), // Convert BigInt to string
+          id: user.id.toString(),
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
           role: user.role,
         },
       };
-    } catch (error: any) {
-      // Provide detailed logging for debugging
-      console.error('AuthService.register - Error during registration:', error);
-      
-      // Re-throw the error to be handled by NestJS exception filters
+    } catch (error) {
       if (error instanceof ConflictException) {
-        console.error('AuthService.register - Email already in use');
+        this.logger.warn(`Email already in use: ${createUserDto.email}`);
         throw error;
       }
       
-      // For debugging purposes, log the detailed error
-      console.error('AuthService.register - Unhandled error:', error.message, error.stack);
+      this.logger.error(
+        `Error during registration: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.stack : undefined
+      );
       
-      // Throw a generic error to avoid exposing sensitive information
+      // Re-throw the error to be handled by NestJS exception filters
       throw error;
     }
   }
@@ -71,54 +76,69 @@ export class AuthService {
    * @returns Access token and user info
    */
   async login(loginDto: LoginDto) {
-    console.log('AuthService.login - Login attempt for email:', loginDto.email);
+    this.logger.log(`Login attempt for email: ${loginDto.email}`);
     
-    // Find user by email
-    const user = await this.userService.findByEmail(loginDto.email);
-    
-    console.log('AuthService.login - User found:', user ? 'Yes' : 'No');
-    
-    // If user not found or inactive, throw exception
-    if (!user || !user.isActive) {
-      console.log('AuthService.login - User not found or inactive');
-      throw new UnauthorizedException('Invalid credentials');
-    }
-    
-    // Compare password with stored hash
-    if (!user.password) {
-      console.log('AuthService.login - User has no password set');
-      throw new UnauthorizedException('Invalid credentials');
-    }
-    
-    console.log('AuthService.login - Comparing password hash');
-    const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
-    
-    console.log('AuthService.login - Password valid:', isPasswordValid ? 'Yes' : 'No');
-    
-    // If password invalid, throw exception
-    if (!isPasswordValid) {
-      console.log('AuthService.login - Invalid password');
-      throw new UnauthorizedException('Invalid credentials');
-    }
-    
-    // Generate JWT payload
-    const payload = {
-      sub: user.id.toString(),
-      email: user.email,
-      role: user.role,
-    };
-    
-    // Return token and user info
-    return {
-      accessToken: this.jwtService.sign(payload),
-      user: {
-        id: user.id.toString(), // Convert BigInt to string
+    try {
+      // Find user by email
+      const user = await this.userService.findByEmail(loginDto.email);
+      
+      // If user not found or inactive, throw exception
+      if (!user || !user.isActive) {
+        this.logger.warn(`Login failed: User not found or inactive - ${loginDto.email}`);
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      
+      // Verify password exists
+      if (!user.password) {
+        this.logger.warn(`Login failed: User has no password set - ${loginDto.email}`);
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      
+      // Compare password with stored hash
+      const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
+      
+      // If password invalid, throw exception
+      if (!isPasswordValid) {
+        this.logger.warn(`Login failed: Invalid password for user - ${loginDto.email}`);
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      
+      this.logger.log(`User authenticated successfully: ${loginDto.email}`);
+      
+      // Generate JWT payload
+      const payload: JwtPayload = {
+        sub: user.id.toString(),
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
         role: user.role,
-      },
-    };
+      };
+      
+      const token = this.jwtService.sign(payload);
+      this.logger.debug(`JWT token generated for user: ${user.email}`);
+      
+      // Return token and user info
+      return {
+        accessToken: token,
+        user: {
+          id: user.id.toString(),
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+        },
+      };
+    } catch (error) {
+      // Don't expose detailed errors to client
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      
+      this.logger.error(
+        `Error during login: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.stack : undefined
+      );
+      
+      throw new UnauthorizedException('Authentication failed');
+    }
   }
 
   /**
@@ -127,13 +147,36 @@ export class AuthService {
    * @returns User profile
    */
   async getProfile(userId: bigint) {
-    const user = await this.userService.findOne(userId);
-    return {
-      id: user.id.toString(), // Convert BigInt to string
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      role: user.role,
-    };
+    this.logger.log(`Getting profile for user ID: ${userId.toString()}`);
+    
+    try {
+      const user = await this.userService.findOne(userId);
+      
+      if (!user) {
+        this.logger.warn(`User not found with ID: ${userId.toString()}`);
+        throw new NotFoundException('User not found');
+      }
+      
+      this.logger.log(`Retrieved profile for user: ${user.email}`);
+      
+      return {
+        id: user.id.toString(),
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      
+      this.logger.error(
+        `Error retrieving user profile: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.stack : undefined
+      );
+      
+      throw new NotFoundException('User profile not found');
+    }
   }
 }

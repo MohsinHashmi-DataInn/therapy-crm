@@ -5,10 +5,9 @@ import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-va
 export enum CommunicationType {
   EMAIL = 'EMAIL',
   PHONE = 'PHONE',
-  SMS = 'SMS',
-  LETTER = 'LETTER',
-  MEETING = 'MEETING',
-  OTHER = 'OTHER'
+  INPERSON = 'INPERSON',
+  VIDEO = 'VIDEO',
+  SMS = 'SMS'
 }
 
 /**

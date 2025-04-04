@@ -49,7 +49,7 @@ async function bootstrap() {
   
   // Enhanced CORS configuration to fix fetch issues
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: true, // Allow any origin for development
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     allowedHeaders: 'Content-Type,Accept,Authorization',
