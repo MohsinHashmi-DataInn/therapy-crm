@@ -178,8 +178,17 @@ export class UserController {
       }
 
       try {
-        // Convert string ID to BigInt and find the user
-        return await this.userService.findOne(BigInt(id));
+        // Special case for 'profile' path parameter - use current user's ID
+        if (id === 'profile') {
+          return await this.userService.findOne(req.user.id);
+        }
+        
+        // For numeric IDs, convert string ID to BigInt and find the user
+        if (/^\d+$/.test(id)) {
+          return await this.userService.findOne(BigInt(id));
+        } else {
+          throw new NotFoundException(`Invalid user ID format: ${id}`);
+        }
       } catch (error: any) {
         // Properly handle not found errors
         if (error instanceof NotFoundException) {

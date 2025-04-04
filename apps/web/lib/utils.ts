@@ -1,66 +1,48 @@
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
 
-/**
- * Utility function to merge Tailwind CSS classes with conditionals
- * This helps create dynamic class names with proper precedence
- */
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  return twMerge(clsx(inputs))
 }
 
-/**
- * Format a date object to a localized string
- */
-export function formatDate(date: Date | string | number): string {
-  const d = new Date(date);
-  return d.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+// Format date as MM/DD/YYYY
+export function formatDate(dateInput: string | number | Date | null | undefined): string {
+  if (!dateInput) return 'N/A';
+  try {
+    const date = new Date(dateInput);
+    // Check if the date object is valid
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid date provided to formatDate:', dateInput);
+      return 'Invalid Date';
+    }
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Error';
+  }
 }
 
-/**
- * Format a time string (HH:MM:SS) to 12-hour format with AM/PM
- */
-export function formatTime(time: string): string {
-  // Check if time is a valid date string (like ISO format)
-  if (!isNaN(Date.parse(time))) {
-    const date = new Date(time);
+// Format time as hh:mm AM/PM
+export function formatTime(dateInput: string | number | Date | null | undefined): string {
+  if (!dateInput) return 'N/A';
+  try {
+    const date = new Date(dateInput);
+    // Check if the date object is valid
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid date provided to formatTime:', dateInput);
+      return 'Invalid Date';
+    }
     return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
     });
+  } catch (error) {
+    console.error('Error formatting time:', error);
+    return 'Error';
   }
-
-  // If time is in format HH:MM:SS
-  const [hours, minutes] = time.split(':').map(Number);
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const formattedHours = hours % 12 || 12; // Convert 0 to 12 for 12 AM
-  return `${formattedHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-}
-
-/**
- * Format currency values
- */
-export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-  }).format(value);
-}
-
-/**
- * Format a phone number to a standardized format (XXX) XXX-XXXX
- */
-export function formatPhoneNumber(phoneNumberString: string): string {
-  const cleaned = ('' + phoneNumberString).replace(/\D/g, '');
-  const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
-  if (match) {
-    return '(' + match[1] + ') ' + match[2] + '-' + match[3];
-  }
-  return phoneNumberString;
 }

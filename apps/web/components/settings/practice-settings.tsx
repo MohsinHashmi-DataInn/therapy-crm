@@ -1,494 +1,311 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import React from 'react'; 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm, ControllerRenderProps, FieldValues } from 'react-hook-form'; 
 import * as z from 'zod';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PracticeInfo, useSettings } from '@/hooks/use-settings';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner'; 
 
-// Practice information schema validation
-const practiceSchema = z.object({
-  name: z.string().min(1, 'Practice name is required'),
-  address: z.string().min(1, 'Address is required'),
-  city: z.string().min(1, 'City is required'),
-  state: z.string().min(1, 'State is required'),
-  zip: z.string().min(5, 'ZIP code must be at least 5 digits'),
-  phone: z.string().min(10, 'Phone number must be at least 10 digits'),
-  email: z.string().email('Invalid email address'),
-  website: z.string().optional(),
-  hoursOfOperation: z.object({
-    monday: z.object({
-      open: z.string(),
-      close: z.string(),
-      closed: z.boolean(),
-    }),
-    tuesday: z.object({
-      open: z.string(),
-      close: z.string(),
-      closed: z.boolean(),
-    }),
-    wednesday: z.object({
-      open: z.string(),
-      close: z.string(),
-      closed: z.boolean(),
-    }),
-    thursday: z.object({
-      open: z.string(),
-      close: z.string(),
-      closed: z.boolean(),
-    }),
-    friday: z.object({
-      open: z.string(),
-      close: z.string(),
-      closed: z.boolean(),
-    }),
-    saturday: z.object({
-      open: z.string(),
-      close: z.string(),
-      closed: z.boolean(),
-    }),
-    sunday: z.object({
-      open: z.string(),
-      close: z.string(),
-      closed: z.boolean(),
-    }),
-  }),
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea'; 
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton"; 
+import { apiClient } from '@/lib/api-client'; 
+
+// Define the Zod schema based on UpdatePracticeDto (allow optional fields)
+const practiceFormSchema = z.object({
+  name: z.string().min(2, { message: 'Practice name must be at least 2 characters.' }).max(255),
+  address: z.string().max(255).optional().or(z.literal('')), 
+  city: z.string().max(100).optional().or(z.literal('')), 
+  state: z.string().max(100).optional().or(z.literal('')), 
+  zipCode: z.string().max(20).optional().or(z.literal('')), 
+  phone: z.string().max(30).optional().or(z.literal('')), 
+  email: z.string().email({ message: "Invalid email address." }).max(255).optional().or(z.literal('')), 
+  website: z.string().url({ message: "Invalid URL." }).max(255).optional().or(z.literal('')), 
+  hoursOfOperation: z.string().max(1000).optional().or(z.literal('')), 
 });
 
+type PracticeFormValues = z.infer<typeof practiceFormSchema>;
+
+// Define the type for the fetched Practice data (matching backend Practice model)
+interface PracticeData extends PracticeFormValues {
+    id: bigint; 
+    createdAt: string | Date;
+    updatedAt: string | Date;
+}
+
+// API Fetching Functions
+const fetchPracticeInfo = async (): Promise<PracticeData> => {
+    const response = await apiClient.get<PracticeData>('/practice');
+    return response.data; 
+};
+
+const updatePracticeInfo = async (data: PracticeFormValues): Promise<PracticeData> => {
+    const response = await apiClient.put<PracticeData>('/practice', data);
+    return response.data;
+};
+
 export function PracticeSettings() {
-  const { fetchPracticeInfo, updatePracticeInfo, loading } = useSettings();
-  const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  
-  const form = useForm<PracticeInfo>({
-    resolver: zodResolver(practiceSchema),
+  const queryClient = useQueryClient();
+
+  const { 
+    data: practiceData, 
+    isLoading: isLoadingPractice, 
+    isError: isErrorLoading, 
+    error: loadingError 
+  } = useQuery<PracticeData, Error>({
+    queryKey: ['practiceInfo'],
+    queryFn: fetchPracticeInfo,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    // Use placeholderData instead of keepPreviousData for TanStack Query v5+
+    placeholderData: (previousData) => previousData, 
+    // keepPreviousData: true, // Outdated option
+  });
+
+  const { mutate: updatePractice, isPending: isUpdating } = useMutation<PracticeData, Error, PracticeFormValues>({
+    mutationFn: updatePracticeInfo,
+    onSuccess: (updatedData) => {
+        toast.success('Practice information updated successfully!');
+        queryClient.setQueryData(['practiceInfo'], updatedData);
+    },
+    onError: (error) => {
+        toast.error(`Failed to update practice information: ${error.message}`);
+    },
+  });
+
+  const form = useForm<PracticeFormValues>({
+    resolver: zodResolver(practiceFormSchema),
     defaultValues: {
       name: '',
       address: '',
       city: '',
       state: '',
-      zip: '',
+      zipCode: '',
       phone: '',
       email: '',
       website: '',
-      hoursOfOperation: {
-        monday: { open: '09:00', close: '17:00', closed: false },
-        tuesday: { open: '09:00', close: '17:00', closed: false },
-        wednesday: { open: '09:00', close: '17:00', closed: false },
-        thursday: { open: '09:00', close: '17:00', closed: false },
-        friday: { open: '09:00', close: '17:00', closed: false },
-        saturday: { open: '09:00', close: '17:00', closed: true },
-        sunday: { open: '09:00', close: '17:00', closed: true },
-      },
+      hoursOfOperation: '',
     },
   });
 
-  // Fetch practice information on component mount
-  useEffect(() => {
-    const loadPracticeInfo = async () => {
-      setIsLoading(true);
-      try {
-        const practiceInfo = await fetchPracticeInfo();
-        if (practiceInfo) {
-          form.reset(practiceInfo);
-        }
-      } catch (error) {
-        console.error('Failed to load practice information:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadPracticeInfo();
-  }, [fetchPracticeInfo, form]);
-
-  // Handle form submission
-  const onSubmit = async (data: PracticeInfo) => {
-    setIsSaving(true);
-    try {
-      await updatePracticeInfo(data);
-    } finally {
-      setIsSaving(false);
+  React.useEffect(() => {
+    if (practiceData) {
+      // Explicitly cast types if TS complains, though it shouldn't be needed with PracticeData type
+      form.reset({
+        name: practiceData.name || '',
+        address: practiceData.address || '',
+        city: practiceData.city || '',
+        state: practiceData.state || '',
+        zipCode: practiceData.zipCode || '',
+        phone: practiceData.phone || '',
+        email: practiceData.email || '',
+        website: practiceData.website || '',
+        hoursOfOperation: practiceData.hoursOfOperation || '',
+      });
     }
-  };
+  }, [practiceData, form.reset]); 
+
+  function onSubmit(data: PracticeFormValues) {
+    console.log('Submitting Practice Info:', data);
+    updatePractice(data);
+  }
+
+  if (isLoadingPractice) {
+    return (
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-1/2" />
+          <Skeleton className="h-4 w-3/4" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-20 w-full" />
+        </CardContent>
+        <CardFooter>
+          <Skeleton className="h-10 w-24" />
+        </CardFooter>
+      </Card>
+    );
+  }
+
+  if (isErrorLoading) {
+    return (
+      <Card className="border-destructive">
+        <CardHeader>
+          <CardTitle>Error Loading Practice Information</CardTitle>
+          <CardDescription className="text-destructive">
+            Failed to load practice details. Please try again later.
+            {loadingError?.message && <p>Details: {loadingError.message}</p>}
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Practice Information</CardTitle>
         <CardDescription>
-          Manage details about your therapy practice.
+          Manage your practice's details.
         </CardDescription>
       </CardHeader>
-      {isLoading ? (
-        <CardContent className="flex justify-center py-8">
-          <div className="flex flex-col items-center gap-2">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Loading practice information...</p>
-          </div>
-        </CardContent>
-      ) : (
-        <form onSubmit={form.handleSubmit(onSubmit)}>
-          <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <h3 className="text-sm font-medium">Basic Information</h3>
-              
-              <div className="space-y-2">
-                <Label htmlFor="name">Practice Name</Label>
-                <Input
-                  id="name"
-                  placeholder="Serenity Therapy Services"
-                  {...form.register('name')}
-                />
-                {form.formState.errors.name && (
-                  <p className="text-sm text-red-500">{form.formState.errors.name.message}</p>
-                )}
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="address">Street Address</Label>
-                <Input
-                  id="address"
-                  placeholder="123 Main St, Suite 456"
-                  {...form.register('address')}
-                />
-                {form.formState.errors.address && (
-                  <p className="text-sm text-red-500">{form.formState.errors.address.message}</p>
-                )}
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="city">City</Label>
-                  <Input
-                    id="city"
-                    placeholder="San Francisco"
-                    {...form.register('city')}
-                  />
-                  {form.formState.errors.city && (
-                    <p className="text-sm text-red-500">{form.formState.errors.city.message}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="state">State</Label>
-                  <Input
-                    id="state"
-                    placeholder="CA"
-                    {...form.register('state')}
-                  />
-                  {form.formState.errors.state && (
-                    <p className="text-sm text-red-500">{form.formState.errors.state.message}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="zip">ZIP Code</Label>
-                  <Input
-                    id="zip"
-                    placeholder="94105"
-                    {...form.register('zip')}
-                  />
-                  {form.formState.errors.zip && (
-                    <p className="text-sm text-red-500">{form.formState.errors.zip.message}</p>
-                  )}
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    placeholder="(415) 555-1234"
-                    {...form.register('phone')}
-                  />
-                  {form.formState.errors.phone && (
-                    <p className="text-sm text-red-500">{form.formState.errors.phone.message}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="contact@example.com"
-                    {...form.register('email')}
-                  />
-                  {form.formState.errors.email && (
-                    <p className="text-sm text-red-500">{form.formState.errors.email.message}</p>
-                  )}
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="website">Website (optional)</Label>
-                <Input
-                  id="website"
-                  placeholder="https://www.example.com"
-                  {...form.register('website')}
-                />
-              </div>
-            </div>
-            
-            <div className="space-y-4">
-              <h3 className="text-sm font-medium">Hours of Operation</h3>
-              
-              {/* Monday */}
-              <div className="grid grid-cols-12 gap-4 items-center">
-                <div className="col-span-2">
-                  <Label>Monday</Label>
-                </div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.monday.open')}
-                    disabled={form.watch('hoursOfOperation.monday.closed')}
-                  />
-                </div>
-                <div className="col-span-1 text-center">to</div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.monday.close')}
-                    disabled={form.watch('hoursOfOperation.monday.closed')}
-                  />
-                </div>
-                <div className="col-span-3 flex items-center space-x-2">
-                  <Checkbox
-                    id="monday-closed"
-                    checked={form.watch('hoursOfOperation.monday.closed')}
-                    onCheckedChange={(checked) =>
-                      form.setValue('hoursOfOperation.monday.closed', checked as boolean)
-                    }
-                  />
-                  <Label htmlFor="monday-closed" className="text-sm">Closed</Label>
-                </div>
-              </div>
-              
-              {/* Tuesday */}
-              <div className="grid grid-cols-12 gap-4 items-center">
-                <div className="col-span-2">
-                  <Label>Tuesday</Label>
-                </div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.tuesday.open')}
-                    disabled={form.watch('hoursOfOperation.tuesday.closed')}
-                  />
-                </div>
-                <div className="col-span-1 text-center">to</div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.tuesday.close')}
-                    disabled={form.watch('hoursOfOperation.tuesday.closed')}
-                  />
-                </div>
-                <div className="col-span-3 flex items-center space-x-2">
-                  <Checkbox
-                    id="tuesday-closed"
-                    checked={form.watch('hoursOfOperation.tuesday.closed')}
-                    onCheckedChange={(checked) =>
-                      form.setValue('hoursOfOperation.tuesday.closed', checked as boolean)
-                    }
-                  />
-                  <Label htmlFor="tuesday-closed" className="text-sm">Closed</Label>
-                </div>
-              </div>
-              
-              {/* Wednesday */}
-              <div className="grid grid-cols-12 gap-4 items-center">
-                <div className="col-span-2">
-                  <Label>Wednesday</Label>
-                </div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.wednesday.open')}
-                    disabled={form.watch('hoursOfOperation.wednesday.closed')}
-                  />
-                </div>
-                <div className="col-span-1 text-center">to</div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.wednesday.close')}
-                    disabled={form.watch('hoursOfOperation.wednesday.closed')}
-                  />
-                </div>
-                <div className="col-span-3 flex items-center space-x-2">
-                  <Checkbox
-                    id="wednesday-closed"
-                    checked={form.watch('hoursOfOperation.wednesday.closed')}
-                    onCheckedChange={(checked) =>
-                      form.setValue('hoursOfOperation.wednesday.closed', checked as boolean)
-                    }
-                  />
-                  <Label htmlFor="wednesday-closed" className="text-sm">Closed</Label>
-                </div>
-              </div>
-              
-              {/* Thursday */}
-              <div className="grid grid-cols-12 gap-4 items-center">
-                <div className="col-span-2">
-                  <Label>Thursday</Label>
-                </div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.thursday.open')}
-                    disabled={form.watch('hoursOfOperation.thursday.closed')}
-                  />
-                </div>
-                <div className="col-span-1 text-center">to</div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.thursday.close')}
-                    disabled={form.watch('hoursOfOperation.thursday.closed')}
-                  />
-                </div>
-                <div className="col-span-3 flex items-center space-x-2">
-                  <Checkbox
-                    id="thursday-closed"
-                    checked={form.watch('hoursOfOperation.thursday.closed')}
-                    onCheckedChange={(checked) =>
-                      form.setValue('hoursOfOperation.thursday.closed', checked as boolean)
-                    }
-                  />
-                  <Label htmlFor="thursday-closed" className="text-sm">Closed</Label>
-                </div>
-              </div>
-              
-              {/* Friday */}
-              <div className="grid grid-cols-12 gap-4 items-center">
-                <div className="col-span-2">
-                  <Label>Friday</Label>
-                </div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.friday.open')}
-                    disabled={form.watch('hoursOfOperation.friday.closed')}
-                  />
-                </div>
-                <div className="col-span-1 text-center">to</div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.friday.close')}
-                    disabled={form.watch('hoursOfOperation.friday.closed')}
-                  />
-                </div>
-                <div className="col-span-3 flex items-center space-x-2">
-                  <Checkbox
-                    id="friday-closed"
-                    checked={form.watch('hoursOfOperation.friday.closed')}
-                    onCheckedChange={(checked) =>
-                      form.setValue('hoursOfOperation.friday.closed', checked as boolean)
-                    }
-                  />
-                  <Label htmlFor="friday-closed" className="text-sm">Closed</Label>
-                </div>
-              </div>
-              
-              {/* Saturday */}
-              <div className="grid grid-cols-12 gap-4 items-center">
-                <div className="col-span-2">
-                  <Label>Saturday</Label>
-                </div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.saturday.open')}
-                    disabled={form.watch('hoursOfOperation.saturday.closed')}
-                  />
-                </div>
-                <div className="col-span-1 text-center">to</div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.saturday.close')}
-                    disabled={form.watch('hoursOfOperation.saturday.closed')}
-                  />
-                </div>
-                <div className="col-span-3 flex items-center space-x-2">
-                  <Checkbox
-                    id="saturday-closed"
-                    checked={form.watch('hoursOfOperation.saturday.closed')}
-                    onCheckedChange={(checked) =>
-                      form.setValue('hoursOfOperation.saturday.closed', checked as boolean)
-                    }
-                  />
-                  <Label htmlFor="saturday-closed" className="text-sm">Closed</Label>
-                </div>
-              </div>
-              
-              {/* Sunday */}
-              <div className="grid grid-cols-12 gap-4 items-center">
-                <div className="col-span-2">
-                  <Label>Sunday</Label>
-                </div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.sunday.open')}
-                    disabled={form.watch('hoursOfOperation.sunday.closed')}
-                  />
-                </div>
-                <div className="col-span-1 text-center">to</div>
-                <div className="col-span-3">
-                  <Input
-                    type="time"
-                    {...form.register('hoursOfOperation.sunday.close')}
-                    disabled={form.watch('hoursOfOperation.sunday.closed')}
-                  />
-                </div>
-                <div className="col-span-3 flex items-center space-x-2">
-                  <Checkbox
-                    id="sunday-closed"
-                    checked={form.watch('hoursOfOperation.sunday.closed')}
-                    onCheckedChange={(checked) =>
-                      form.setValue('hoursOfOperation.sunday.closed', checked as boolean)
-                    }
-                  />
-                  <Label htmlFor="sunday-closed" className="text-sm">Closed</Label>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-          
-          <CardFooter className="flex justify-end space-x-4 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => form.reset()}
-              disabled={isSaving}
-            >
-              Reset
-            </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                'Save Changes'
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          <CardContent className="space-y-4">
+            <FormField
+              control={form.control} 
+              name="name"
+              render={({ field }: { field: ControllerRenderProps<PracticeFormValues, 'name'> }) => (
+                <FormItem>
+                  <FormLabel>Practice Name *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Your Practice Name" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )}
+            />
+
+            <FormField
+              control={form.control} 
+              name="address"
+              render={({ field }: { field: ControllerRenderProps<PracticeFormValues, 'address'> }) => (
+                <FormItem>
+                  <FormLabel>Address</FormLabel>
+                  <FormControl>
+                    <Input placeholder="123 Main St" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <FormField
+                control={form.control} 
+                name="city"
+                render={({ field }: { field: ControllerRenderProps<PracticeFormValues, 'city'> }) => (
+                  <FormItem>
+                    <FormLabel>City</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Anytown" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control} 
+                name="state"
+                render={({ field }: { field: ControllerRenderProps<PracticeFormValues, 'state'> }) => (
+                  <FormItem>
+                    <FormLabel>State / Province</FormLabel>
+                    <FormControl>
+                      <Input placeholder="CA" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control} 
+                name="zipCode"
+                render={({ field }: { field: ControllerRenderProps<PracticeFormValues, 'zipCode'> }) => (
+                  <FormItem>
+                    <FormLabel>Zip / Postal Code</FormLabel>
+                    <FormControl>
+                      <Input placeholder="90210" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control} 
+              name="phone"
+              render={({ field }: { field: ControllerRenderProps<PracticeFormValues, 'phone'> }) => (
+                <FormItem>
+                  <FormLabel>Phone Number</FormLabel>
+                  <FormControl>
+                    <Input placeholder="(555) 123-4567" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control} 
+              name="email"
+              render={({ field }: { field: ControllerRenderProps<PracticeFormValues, 'email'> }) => (
+                <FormItem>
+                  <FormLabel>Email Address</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="contact@yourpractice.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control} 
+              name="website"
+              render={({ field }: { field: ControllerRenderProps<PracticeFormValues, 'website'> }) => (
+                <FormItem>
+                  <FormLabel>Website</FormLabel>
+                  <FormControl>
+                    <Input type="url" placeholder="https://www.yourpractice.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control} 
+              name="hoursOfOperation"
+              render={({ field }: { field: ControllerRenderProps<PracticeFormValues, 'hoursOfOperation'> }) => (
+                <FormItem>
+                  <FormLabel>Hours of Operation</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="e.g., Mon-Fri: 9am - 5pm\nSat: 10am - 2pm"
+                      className="resize-none"
+                      {...field}
+                    />
+                  </FormControl>
+                   <FormDescription>
+                    Enter operating hours as plain text.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </CardContent>
+          <CardFooter>
+            <Button type="submit" disabled={isUpdating}>
+              {isUpdating ? 'Saving...' : 'Save Changes'}
             </Button>
           </CardFooter>
         </form>
-      )}
+      </Form>
     </Card>
   );
 }

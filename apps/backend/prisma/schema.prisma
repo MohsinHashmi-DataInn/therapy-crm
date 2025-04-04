@@ -164,6 +164,32 @@ model Waitlist {
   @@map("waitlist")
 }
 
+model Practice {
+  id               BigInt   @id @default(autoincrement())
+  name             String
+  address          String?
+  city             String?
+  state            String?
+  zipCode          String?  @map("zip_code")
+  phone            String?
+  email            String?
+  website          String?
+  hoursOfOperation String?  @map("hours_of_operation")
+  billingName      String?  @map("billing_name") // Name on card/account
+  billingEmail     String?  @map("billing_email") // Email for billing notifications
+  billingAddress   String?  @map("billing_address")
+  billingCity      String?  @map("billing_city")
+  billingState     String?  @map("billing_state")
+  billingZipCode   String?  @map("billing_zip_code")
+  stripeCustomerId     String?  @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?  @unique @map("stripe_subscription_id")
+  subscriptionStatus String?  @default("inactive") @map("subscription_status") // e.g., active, inactive, trialing, past_due
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("practice")
+}
+
 enum UserRole {
   ADMIN
   THERAPIST
@@ -201,9 +227,9 @@ enum AppointmentStatus {
 }
 
 enum Priority {
-  HIGH
-  MEDIUM
   LOW
+  MEDIUM
+  HIGH
 
   @@map("priority")
 }
@@ -219,18 +245,16 @@ enum CommunicationType {
 }
 
 enum ServiceType {
-  SPEECH_THERAPY
-  OCCUPATIONAL_THERAPY
-  PHYSICAL_THERAPY
-  BEHAVIORAL_THERAPY
+  THERAPY
+  ASSESSMENT
+  CONSULTATION
 
   @@map("service_type")
 }
 
 enum WaitlistStatus {
   WAITING
-  CONTACTED
-  SCHEDULED
+  PLACED
   CANCELLED
 
   @@map("waitlist_status")
