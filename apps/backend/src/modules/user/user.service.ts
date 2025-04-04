@@ -2,8 +2,9 @@ import { ConflictException, Injectable, Logger, NotFoundException } from '@nestj
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
+import * as bcrypt from 'bcrypt';
+import { UserRole } from '@prisma/client';
 
 // Define a type for serialized user (with ID as string instead of BigInt)
 export type SerializedUser = Omit<User, 'password' | 'id' | 'createdBy' | 'updatedBy'> & {
@@ -49,12 +50,12 @@ export class UserService {
         email: createUserDto.email,
         password: hashedPassword,
         phone: createUserDto.phone,
-        role: createUserDto.role || 'STAFF',
+        role: createUserDto.role || UserRole.STAFF,
         isActive: true,
         createdBy: createdById ? createdById : null,
+        // Use proper Prisma types for dates - use undefined instead of null
         createdAt: new Date(),
-        updatedAt: null,
-        updatedBy: null
+        // Exclude updatedAt and updatedBy to let Prisma handle them with default values
       };
 
       console.log('UserService.create - Attempting to create user with data:', {
@@ -150,9 +151,35 @@ export class UserService {
    * @returns User or null if not found
    */
   async findByEmail(email: string): Promise<User | null> {
-    return this.prismaService.user.findUnique({
-      where: { email },
-    }) as unknown as User | null;
+    this.logger.log(`[DEBUG] Searching for user by email: ${email}`);
+    console.log(`[DEBUG] findByEmail - Searching database for user with email: ${email}`);
+    
+    try {
+      const user = await this.prismaService.user.findUnique({
+        where: { email },
+      }) as unknown as User | null;
+      
+      if (user) {
+        this.logger.log(`[DEBUG] User found with email: ${email}, ID: ${user.id?.toString()}, Role: ${user.role}`);
+        console.log(`[DEBUG] findByEmail - User found:`, {
+          id: user.id?.toString(),
+          email: user.email,
+          role: user.role,
+          isActive: user.isActive,
+          hasPassword: !!user.password,
+          passwordLength: user.password?.length || 0
+        });
+      } else {
+        this.logger.warn(`[DEBUG] No user found with email: ${email}`);
+        console.log(`[DEBUG] findByEmail - No user found with email: ${email}`);
+      }
+      
+      return user;
+    } catch (error) {
+      this.logger.error(`[DEBUG] Error finding user by email: ${email}`, error);
+      console.error(`[DEBUG] findByEmail - Database error:`, error);
+      throw error;
+    }
   }
 
   /**

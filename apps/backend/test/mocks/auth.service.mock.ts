@@ -4,6 +4,7 @@ import { PrismaService } from '../../src/common/prisma/prisma.service';
 import { TEST_USERS } from '../setup';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from '../../src/modules/user/dto/create-user.dto';
+import { UserRole } from '@prisma/client';
 
 /**
  * Mock AuthService for testing purposes
@@ -50,7 +51,7 @@ export class MockAuthService {
           password: hashedPassword,
           firstName: createUserDto.firstName,
           lastName: createUserDto.lastName,
-          role: createUserDto.role || 'THERAPIST',
+          role: createUserDto.role || UserRole.THERAPIST,
           phone: createUserDto.phone,
           isActive: true,
         },

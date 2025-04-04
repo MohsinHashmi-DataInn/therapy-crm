@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateLearnerDto } from './dto/create-learner.dto';
 import { UpdateLearnerDto } from './dto/update-learner.dto';
+import { LearnerStatus } from '@prisma/client';
 
 // Define local Learner interface to match the Prisma schema
 export interface Learner {
@@ -12,9 +13,9 @@ export interface Learner {
   gender?: string;
   course?: string;
   schedule?: string;
-  status?: string;
+  status?: LearnerStatus;
   notes?: string | null;
-  clientId?: bigint;
+  clientId: bigint;
   instructorId?: bigint | null;
   createdBy?: bigint;
   updatedBy?: bigint | null;
@@ -75,7 +76,7 @@ export class LearnerService {
         gender: createLearnerDto.gender,
         course: createLearnerDto.course,
         schedule: createLearnerDto.schedule,
-        status: createLearnerDto.status,
+        status: createLearnerDto.status || LearnerStatus.ACTIVE,
         notes: createLearnerDto.notes,
         client: {
           connect: { id: BigInt(createLearnerDto.clientId) },
@@ -83,7 +84,9 @@ export class LearnerService {
         instructor: instructorId ? {
           connect: { id: instructorId },
         } : undefined,
-        createdBy: userId,
+        createdByUser: userId ? {
+          connect: { id: userId },
+        } : undefined,
       },
       include: {
         client: true,
@@ -255,7 +258,7 @@ export class LearnerService {
         gender: updateLearnerDto.gender,
         course: updateLearnerDto.course,
         schedule: updateLearnerDto.schedule,
-        status: updateLearnerDto.status,
+        status: updateLearnerDto.status ? { set: updateLearnerDto.status } : undefined,
         notes: updateLearnerDto.notes,
         client: clientId ? {
           connect: { id: clientId },
@@ -267,7 +270,9 @@ export class LearnerService {
             disconnect: true,
           }
         ) : undefined,
-        updatedBy: userId,
+        updatedByUser: userId ? {
+          connect: { id: userId },
+        } : undefined,
       },
       include: {
         client: {

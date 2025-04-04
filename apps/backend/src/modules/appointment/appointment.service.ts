@@ -2,15 +2,9 @@ import { Injectable, NotFoundException, BadRequestException, ConflictException }
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+import { AppointmentStatus } from '@prisma/client';
 
-// Define enum and interface locally to match the Prisma schema
-export enum AppointmentStatus {
-  SCHEDULED = 'SCHEDULED',
-  CANCELLED = 'CANCELLED',
-  COMPLETED = 'COMPLETED',
-  NO_SHOW = 'NO_SHOW'
-}
-
+// AppointmentType not in Prisma schema, keeping local definition
 export enum AppointmentType {
   INITIAL_ASSESSMENT = 'INITIAL_ASSESSMENT',
   FOLLOW_UP = 'FOLLOW_UP',
@@ -60,24 +54,34 @@ export class AppointmentService {
     const endTime = new Date(createAppointmentDto.endTime);
 
     // Validate start and end times
-    this.validateAppointmentTimes(startTime, endTime);
+    if (startTime >= endTime) {
+      throw new BadRequestException('End time must be after start time');
+    }
+
+    // Ensure appointments aren't in the past
+    const now = new Date();
+    if (startTime < now) {
+      throw new BadRequestException('Appointments cannot be scheduled in the past');
+    }
 
     // Convert IDs to BigInt
     const therapistId = BigInt(createAppointmentDto.therapistId);
-    let clientId: bigint | null = null;
+    let clientId: bigint;
     let learnerId: bigint | null = null;
 
-    if (createAppointmentDto.clientId) {
-      clientId = BigInt(createAppointmentDto.clientId);
+    // Client ID is required in the Prisma schema
+    if (!createAppointmentDto.clientId) {
+      throw new BadRequestException('Client ID is required');
+    }
+    clientId = BigInt(createAppointmentDto.clientId);
       
-      // Verify client exists
-      const client = await this.prismaService.client.findUnique({
-        where: { id: clientId },
-      });
+    // Verify client exists
+    const client = await this.prismaService.client.findUnique({
+      where: { id: clientId },
+    });
 
-      if (!client) {
-        throw new NotFoundException(`Client with ID ${createAppointmentDto.clientId} not found`);
-      }
+    if (!client) {
+      throw new NotFoundException(`Client with ID ${createAppointmentDto.clientId} not found`);
     }
 
     if (createAppointmentDto.learnerId) {
@@ -120,15 +124,23 @@ export class AppointmentService {
       data: {
         startTime,
         endTime,
-        type: createAppointmentDto.type,
+        // Remove type field as it's not in the Prisma schema
         status: createAppointmentDto.status || AppointmentStatus.SCHEDULED,
         title: createAppointmentDto.title,
         notes: createAppointmentDto.notes,
         location: createAppointmentDto.location,
-        clientId,
-        learnerId,
-        therapistId,
-        createdBy: userId,
+        client: {
+          connect: { id: clientId }
+        },
+        learner: learnerId ? {
+          connect: { id: learnerId }
+        } : undefined,
+        therapist: {
+          connect: { id: therapistId }
+        },
+        createdByUser: userId ? {
+          connect: { id: userId }
+        } : undefined,
       },
       include: {
         client: {

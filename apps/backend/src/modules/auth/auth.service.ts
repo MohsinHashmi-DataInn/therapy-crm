@@ -76,34 +76,49 @@ export class AuthService {
    * @returns Access token and user info
    */
   async login(loginDto: LoginDto) {
-    this.logger.log(`Login attempt for email: ${loginDto.email}`);
+    this.logger.log(`[DEBUG] Login attempt for email: ${loginDto.email}`);
+    console.log(`[DEBUG] LOGIN ATTEMPT - Email: ${loginDto.email}, Password length: ${loginDto.password?.length || 0}`);
     
     try {
       // Find user by email
+      this.logger.log(`[DEBUG] Searching for user with email: ${loginDto.email}`);
       const user = await this.userService.findByEmail(loginDto.email);
+      console.log(`[DEBUG] User search result:`, user ? `Found user with ID: ${user.id}` : 'User not found');
       
       // If user not found or inactive, throw exception
-      if (!user || !user.isActive) {
-        this.logger.warn(`Login failed: User not found or inactive - ${loginDto.email}`);
+      if (!user) {
+        this.logger.warn(`[DEBUG] Login failed: User not found - ${loginDto.email}`);
+        console.log(`[DEBUG] LOGIN FAILED - User not found: ${loginDto.email}`);
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      
+      if (!user.isActive) {
+        this.logger.warn(`[DEBUG] Login failed: User is inactive - ${loginDto.email}`);
+        console.log(`[DEBUG] LOGIN FAILED - User inactive: ${loginDto.email}`);
         throw new UnauthorizedException('Invalid credentials');
       }
       
       // Verify password exists
       if (!user.password) {
-        this.logger.warn(`Login failed: User has no password set - ${loginDto.email}`);
+        this.logger.warn(`[DEBUG] Login failed: User has no password set - ${loginDto.email}`);
+        console.log(`[DEBUG] LOGIN FAILED - No password set for user: ${loginDto.email}`);
         throw new UnauthorizedException('Invalid credentials');
       }
       
       // Compare password with stored hash
+      console.log(`[DEBUG] Comparing password: Input length ${loginDto.password?.length || 0}, Stored hash length: ${user.password?.length || 0}`);
       const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
+      console.log(`[DEBUG] Password validation result: ${isPasswordValid ? 'Valid' : 'Invalid'}`);
       
       // If password invalid, throw exception
       if (!isPasswordValid) {
-        this.logger.warn(`Login failed: Invalid password for user - ${loginDto.email}`);
+        this.logger.warn(`[DEBUG] Login failed: Invalid password for user - ${loginDto.email}`);
+        console.log(`[DEBUG] LOGIN FAILED - Invalid password for: ${loginDto.email}`);
         throw new UnauthorizedException('Invalid credentials');
       }
       
-      this.logger.log(`User authenticated successfully: ${loginDto.email}`);
+      this.logger.log(`[DEBUG] User authenticated successfully: ${loginDto.email}`);
+      console.log(`[DEBUG] LOGIN SUCCESS - User authenticated: ${loginDto.email}, Role: ${user.role}`);
       
       // Generate JWT payload
       const payload: JwtPayload = {
@@ -111,9 +126,11 @@ export class AuthService {
         email: user.email,
         role: user.role,
       };
+      console.log(`[DEBUG] JWT payload:`, JSON.stringify(payload));
       
       const token = this.jwtService.sign(payload);
-      this.logger.debug(`JWT token generated for user: ${user.email}`);
+      this.logger.debug(`[DEBUG] JWT token generated for user: ${user.email}`);
+      console.log(`[DEBUG] JWT token generated, length: ${token?.length || 0}`);
       
       // Return token and user info
       return {
@@ -129,13 +146,16 @@ export class AuthService {
     } catch (error) {
       // Don't expose detailed errors to client
       if (error instanceof UnauthorizedException) {
+        console.log(`[DEBUG] LOGIN ERROR - UnauthorizedException: ${error.message}`);
         throw error;
       }
       
       this.logger.error(
-        `Error during login: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `[DEBUG] Error during login: ${error instanceof Error ? error.message : 'Unknown error'}`,
         error instanceof Error ? error.stack : undefined
       );
+      console.log(`[DEBUG] LOGIN ERROR - Unexpected error:`, error instanceof Error ? error.message : 'Unknown error');
+      console.log(error instanceof Error ? error.stack : 'No stack trace available');
       
       throw new UnauthorizedException('Authentication failed');
     }

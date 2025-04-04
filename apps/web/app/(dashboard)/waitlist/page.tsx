@@ -96,7 +96,7 @@ export default function WaitlistPage() {
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All statuses</SelectItem>
+                  <SelectItem value="all">All statuses</SelectItem>
                   <SelectItem value="waiting">Waiting</SelectItem>
                   <SelectItem value="contacted">Contacted</SelectItem>
                   <SelectItem value="scheduled">Scheduled</SelectItem>
@@ -111,7 +111,7 @@ export default function WaitlistPage() {
                   <SelectValue placeholder="All services" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All services</SelectItem>
+                  <SelectItem value="all">All services</SelectItem>
                   <SelectItem value="individual_therapy">Individual Therapy</SelectItem>
                   <SelectItem value="group_therapy">Group Therapy</SelectItem>
                   <SelectItem value="family_therapy">Family Therapy</SelectItem>

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { AppointmentStatus } from '@prisma/client';
 
 // Define enums locally to match schema
 export enum AppointmentType {
@@ -9,13 +10,7 @@ export enum AppointmentType {
   CONSULTATION = 'CONSULTATION'
 }
 
-export enum AppointmentStatus {
-  SCHEDULED = 'SCHEDULED',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
-  NO_SHOW = 'NO_SHOW',
-  RESCHEDULED = 'RESCHEDULED'
-}
+// Using Prisma-generated AppointmentStatus enum
 
 /**
  * Data Transfer Object for creating a new appointment

@@ -1,14 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { LearnerStatus } from '@prisma/client';
 
-// Define enums locally to match schema
-export enum LearnerStatus {
-  ACTIVE = 'ACTIVE',
-  INACTIVE = 'INACTIVE',
-  GRADUATED = 'GRADUATED',
-  ON_HOLD = 'ON_HOLD'
-}
+// Using Prisma-generated LearnerStatus enum
 
 /**
  * Data Transfer Object for creating a new learner

@@ -17,8 +17,9 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { toast } from "@/components/ui/use-toast";
-import { ClientStatus } from "@/lib/types";
+import { useToast } from "@/components/ui/use-toast";
+// Define the client status type to match backend expectations
+type ClientStatus = 'active' | 'inactive' | 'waitlist' | 'former';
 
 // Validation schema for the client form
 const clientSchema = z.object({
@@ -34,7 +35,7 @@ const clientSchema = z.object({
   insuranceId: z.string().optional(),
   emergencyContactName: z.string().optional(),
   emergencyContactPhone: z.string().optional(),
-  priority: z.string().transform(val => parseInt(val, 10)).optional(),
+  priority: z.number().optional(),
 });
 
 type ClientFormValues = z.infer<typeof clientSchema>;
@@ -45,7 +46,9 @@ type ClientFormValues = z.infer<typeof clientSchema>;
  */
 export default function NewClientPage() {
   const router = useRouter();
-  const { createClient } = useClients();
+  const { useCreateClientMutation } = useClients();
+  const { mutateAsync: createClient } = useCreateClientMutation();
+  const { toast } = useToast();
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientSchema),
@@ -62,7 +65,7 @@ export default function NewClientPage() {
       insuranceId: "",
       emergencyContactName: "",
       emergencyContactPhone: "",
-      priority: "3",
+      priority: 3,
     },
   });
 
@@ -221,8 +224,8 @@ export default function NewClientPage() {
               <div className="space-y-2">
                 <Label htmlFor="priority">Priority</Label>
                 <Select 
-                  onValueChange={(value) => form.setValue("priority", value)}
-                  defaultValue={form.getValues("priority")}
+                  onValueChange={(value) => form.setValue("priority", parseInt(value, 10))}
+                  defaultValue={form.getValues("priority")?.toString()}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select priority" />

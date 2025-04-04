@@ -95,7 +95,7 @@ export default function ClientsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data?.data.length === 0 ? (
+                  {!data?.data || data.data.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center py-8">
                         No clients found. Add your first client to get started.
@@ -154,10 +154,10 @@ export default function ClientsPage() {
                 </TableBody>
               </Table>
               
-              {data && data.meta.totalPages > 1 && (
+              {data && data.meta?.totalPages > 1 && (
                 <div className="flex items-center justify-between px-4 py-4 border-t">
                   <div className="text-sm text-gray-500">
-                    Showing {((page - 1) * 10) + 1} to {Math.min(page * 10, data.meta.total)} of {data.meta.total} clients
+                    Showing {((page - 1) * 10) + 1} to {Math.min(page * 10, data.meta?.total || 0)} of {data.meta?.total || 0} clients
                   </div>
                   <div className="flex space-x-2">
                     <Button 
@@ -171,8 +171,8 @@ export default function ClientsPage() {
                     <Button 
                       variant="outline" 
                       size="sm"
-                      disabled={page === data.meta.totalPages}
-                      onClick={() => setPage((prev) => Math.min(prev + 1, data.meta.totalPages))}
+                      disabled={page === (data.meta?.totalPages || 1)}
+                      onClick={() => setPage((prev) => Math.min(prev + 1, data.meta?.totalPages || 1))}
                     >
                       Next
                     </Button>

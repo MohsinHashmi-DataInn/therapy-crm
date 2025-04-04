@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { UserRole } from '@prisma/client';
 
 /**
  * Data transfer object for creating a new user
@@ -58,10 +59,10 @@ export class CreateUserDto {
   @ApiProperty({ 
     example: 'THERAPIST', 
     description: 'User role',
-    enum: ['ADMIN', 'THERAPIST', 'STAFF'],
-    default: 'THERAPIST'
+    enum: UserRole,
+    default: UserRole.THERAPIST
   })
-  @IsEnum(['ADMIN', 'THERAPIST', 'STAFF'], { message: 'Role must be valid' })
+  @IsEnum(UserRole, { message: 'Role must be valid' })
   @IsOptional()
-  role?: string = 'THERAPIST';
+  role?: UserRole = UserRole.THERAPIST;
 }

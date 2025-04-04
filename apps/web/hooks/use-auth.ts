@@ -64,10 +64,22 @@ export const useAuth = () => {
   const login = useCallback(
     async (credentials: LoginRequest) => {
       setLoading(true);
+      console.log('[DEBUG] Login attempt with credentials:', { 
+        email: credentials.email, 
+        passwordLength: credentials.password?.length || 0 
+      });
       try {
+        console.log('[DEBUG] Sending login request to API...');
         const response = await api.post<LoginResponse>('/auth/login', credentials);
+        console.log('[DEBUG] Login response received:', { 
+          statusCode: response.status, 
+          hasAccessToken: !!response.data?.accessToken,
+          hasUserData: !!response.data?.user,
+        });
+        
         const { accessToken, user } = response.data;
         
+        console.log('[DEBUG] Storing auth data in localStorage...');
         storeAuthData(accessToken, user);
         
         toast({
@@ -78,10 +90,20 @@ export const useAuth = () => {
         
         // Use window.location for a full page navigation instead of Next.js router
         // This ensures a complete page reload and proper auth context initialization
+        console.log('[DEBUG] Redirecting to dashboard...');
         window.location.href = '/dashboard';
         return true;
       } catch (error: any) {
+        console.error('[DEBUG] Login error:', error);
+        console.error('[DEBUG] Error details:', { 
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          message: error.message
+        });
+        
         const errorMessage = error.response?.data?.message || 'Login failed';
+        console.log('[DEBUG] Error message to display:', errorMessage);
         
         toast({
           title: 'Error',
