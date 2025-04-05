@@ -1,0 +1,5 @@
+# This is a manually created migration file to establish a baseline migration
+# It captures the current state of the database as a starting point
+
+migration_name = "20250404_baseline"
+checksum = "60e9bbd2bec7cced31e70e1807e4f1d81de322ed28363a3ca4e8c5f5c1cbdf00"

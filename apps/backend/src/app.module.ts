@@ -10,6 +10,9 @@ import { CommunicationModule } from './modules/communication/communication.modul
 import { WaitlistModule } from './modules/waitlist/waitlist.module';
 import { HealthModule } from './modules/health/health.module';
 import { PracticeModule } from './modules/practice.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { BillingModule } from './modules/billing/billing.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -26,6 +29,9 @@ import { PracticeModule } from './modules/practice.module';
     WaitlistModule,
     HealthModule,
     PracticeModule,
+    AnalyticsModule,
+    BillingModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

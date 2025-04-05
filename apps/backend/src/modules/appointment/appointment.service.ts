@@ -1,17 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, forwardRef, Inject } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { CreateAppointmentDto, AppointmentType, AppointmentStaffDto, AppointmentEquipmentDto, GroupParticipantDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { AppointmentStatus } from '@prisma/client';
-
-// AppointmentType not in Prisma schema, keeping local definition
-export enum AppointmentType {
-  INITIAL_ASSESSMENT = 'INITIAL_ASSESSMENT',
-  FOLLOW_UP = 'FOLLOW_UP',
-  THERAPY_SESSION = 'THERAPY_SESSION',
-  GROUP_SESSION = 'GROUP_SESSION',
-  OTHER = 'OTHER'
-}
+import { TherapyResourceService } from './services/therapy-resource.service';
+import { RecurrencePatternService } from './services/recurrence-pattern.service';
 
 export interface Appointment {
   id: bigint;
