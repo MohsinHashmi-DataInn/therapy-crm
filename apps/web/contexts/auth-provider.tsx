@@ -3,30 +3,43 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { User, UserRole } from "@/lib/types";
-import type { LoginResponse } from "@/lib/api/auth";
 import { useToast } from "@/components/ui/use-toast";
 import { AUTH, ROUTES } from "@/lib/constants";
+import { isAuthRoute, isPublicRoute, isProtectedRoute } from "@/lib/routes";
 import { logAuth } from "@/lib/logger";
+import {
+  LoginRequest,
+  LoginResponse,
+  RegisterRequest,
+  RegisterResponse,
+  ForgotPasswordRequest,
+  ResetPasswordRequest,
+  ChangePasswordRequest
+} from "@/types/auth";
 
 // -------------------
 // TYPES & INTERFACES
 // -------------------
-interface AuthContextType {
+// Anti-redirect-loop constants
+const MAX_REDIRECTS = 3;
+const REDIRECT_TIMEOUT = 2000; // ms
+
+export interface AuthContextType {
   user: User | null;
+  token: string | null;
   loading: boolean;
+  initialized: boolean;
   login: (email: string, password: string) => Promise<LoginResponse | null>;
-  logout: () => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<boolean>;
+  logout: () => void;
+  register: (userData: RegisterRequest) => Promise<RegisterResponse | null>;
+  isAuthenticated: boolean;
   forgotPassword: (email: string) => Promise<boolean>;
   resetPassword: (token: string, password: string) => Promise<boolean>;
   updateUser: (user: User) => void;
-  isAuthenticated?: boolean;
-  hasRole?: (role: string) => boolean;
   sendVerificationEmail?: (email: string) => Promise<boolean>;
   verifyEmail?: (token: string) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
-  currentPassword: string;
-  newPassword: string;
+  hasRole: (role: string) => boolean;
 }
 
 // -------------------
@@ -42,9 +55,31 @@ export function useAuth() {
   return context;
 }
 
-// -------------------
-// HELPER FUNCTIONS
-// -------------------
+// Helper functions for auth
+const hasTokenInStorage = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return !!localStorage.getItem(AUTH.TOKEN_KEY);
+};
+
+/**
+ * Set authentication token in both localStorage and cookies
+ * This ensures both client-side and server-side (middleware) can access it
+ */
+const setAuthToken = (token: string | null): void => {
+  if (typeof window === 'undefined') return;
+  
+  if (token) {
+    // Store in localStorage for client-side access
+    localStorage.setItem(AUTH.TOKEN_KEY, token);
+    
+    // Store in cookies for middleware/SSR access
+    document.cookie = `${AUTH.TOKEN_KEY}=${token}; path=/; max-age=86400; SameSite=Lax`;
+  } else {
+    // Remove from both storage mechanisms
+    localStorage.removeItem(AUTH.TOKEN_KEY);
+    document.cookie = `${AUTH.TOKEN_KEY}=; path=/; max-age=0; SameSite=Lax`;
+  }
+};
 
 /**
  * Get the initial user from localStorage, if any
@@ -58,11 +93,6 @@ function getInitialUserFromStorage(): User | null {
     if (!userJSON) return null;
     
     const user = JSON.parse(userJSON);
-    logAuth('Loaded initial user from localStorage', {
-      email: user.email,
-      id: user.id
-    });
-    
     return user;
   } catch (error) {
     console.error("Error parsing user from localStorage", error);
@@ -71,105 +101,125 @@ function getInitialUserFromStorage(): User | null {
 }
 
 /**
- * Check if a token exists in localStorage
- */
-function hasTokenInStorage(): boolean {
-  if (typeof window === "undefined") return false;
-  const token = localStorage.getItem(AUTH.TOKEN_KEY);
-  logAuth('Token check', { exists: !!token });
-  return !!token;
-}
-
-/**
- * Store user and token in localStorage
- */
-function persistUserAuth(user: User, token: string) {
-  localStorage.setItem(AUTH.USER_KEY, JSON.stringify(user));
-  localStorage.setItem(AUTH.TOKEN_KEY, token);
-}
-
-/**
  * Clear user and token from localStorage
  */
 function clearUserAuth() {
+  if (typeof window === "undefined") return;
   localStorage.removeItem(AUTH.USER_KEY);
   localStorage.removeItem(AUTH.TOKEN_KEY);
 }
 
 /**
- * Check if the current path is an auth route (login, register, etc.)
+ * Get token from storage
  */
-function isAuthRoute(path: string): boolean {
-  return path === ROUTES.LOGIN || path === ROUTES.REGISTER || path === ROUTES.FORGOT_PASSWORD;
-}
-
-/**
- * Check if the current path is a public route (home, privacy policy, etc.)
- */
-function isPublicRoute(path: string): boolean {
-  return path === ROUTES.HOME || 
-    (typeof ROUTES.PRIVACY_POLICY === 'string' && path === ROUTES.PRIVACY_POLICY) || 
-    (typeof ROUTES.TERMS_OF_SERVICE === 'string' && path === ROUTES.TERMS_OF_SERVICE) ||
-    path.startsWith('/api/') ||  // API routes are public
-    path.includes('/verify-email') || // Email verification route is public
-    path.includes('/reset-password') || // Password reset route is public
-    path.includes('redirect-to-dashboard') || // Redirect page is public
-    path.includes('_next') || // Next.js internal routes are public
-    path.includes('favicon'); // Favicon requests are public
-}
-
-// Helper to check if redirects should be disabled
-const shouldPreventRedirects = (): boolean => {
-  // Check for a global override
-  if (sessionStorage.getItem('prevent_all_redirects') === 'true') {
-    return true;
-  }
-  
-  // If redirect loops have been detected, prevent future redirects
-  const redirectTimestamp = parseInt(sessionStorage.getItem('last_redirect_timestamp') || '0');
-  const currentTime = Date.now();
-  
-  // If there have been too many redirects in a short time, prevent further redirects
-  if (redirectTimestamp > 0 && (currentTime - redirectTimestamp < 2000)) {
-    // Less than 2 seconds between redirects - potential loop detected
-    logAuth(" Potential redirect loop detected - preventing further redirects");
-    sessionStorage.setItem('prevent_all_redirects', 'true');
-    return true;
-  }
-  
-  return false;
+const getTokenFromStorage = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(AUTH.TOKEN_KEY);
 };
 
 // -------------------
 // AUTH PROVIDER COMPONENT
 // -------------------
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  logAuth(" Mounting AuthProvider");
+  // Only log in development mode
+  if (process.env.NODE_ENV === 'development') {
+    logAuth('Mounting AuthProvider');
+  }
   
   // State initialization - always start with null for SSR compatibility
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
+  const [redirectCount, setRedirectCount] = useState(0);
+  const [lastRedirectTime, setLastRedirectTime] = useState(0);
   
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
   
-  /**
-   * Check if user is authenticated
-   */
-  const isAuthenticated = !!user;
+  // Helper to check if user is authenticated
+  const isAuthenticated = !!user && hasTokenInStorage();
   
-  /**
-   * Check if user has a specific role
-   */
+  // Helper to check if user has a specific role
   const hasRole = (role: string): boolean => {
     return user?.role === role;
   };
   
   /**
-   * Send email verification link
+   * Safe redirect function with loop protection
+   * Prevents infinite redirect loops by tracking redirect count and timing
    */
+  const safeRedirect = (path: string): void => {
+    if (typeof window === 'undefined') return;
+    
+    const now = Date.now();
+    
+    // Reset count if last redirect was a while ago
+    if (now - lastRedirectTime > REDIRECT_TIMEOUT) {
+      setRedirectCount(0);
+    }
+    
+    // Check for redirect loops
+    if (redirectCount >= MAX_REDIRECTS) {
+      console.error('[Auth] Too many redirects detected, stopping redirect chain');
+      toast({
+        title: "Navigation Error",
+        description: "Too many redirects detected. Please try navigating manually.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Track this redirect
+    setRedirectCount(prev => prev + 1);
+    setLastRedirectTime(now);
+    
+    // Execute the redirect
+    console.log(`[Auth] Redirecting to: ${path}`);
+    router.replace(path);
+  };
+  
+  // Initialize auth state from localStorage
+  useEffect(() => {
+    if (initialized) return;
+    
+    try {
+      const storedUser = getInitialUserFromStorage();
+      if (storedUser) {
+        setUser(storedUser);
+        const storedToken = localStorage.getItem(AUTH.TOKEN_KEY);
+        setToken(storedToken);
+      }
+    } catch (error) {
+      console.error('[Auth] Error initializing auth state:', error);
+      clearUserAuth();
+    } finally {
+      setLoading(false);
+      setInitialized(true);
+    }
+  }, []);
+  
+  // Handle route protection
+  useEffect(() => {
+    if (!initialized || loading || !pathname) return;
+    
+    // Case 1: Protected route with no auth - redirect to login
+    if (isProtectedRoute(pathname) && (!user || !hasTokenInStorage())) {
+      console.log('[Auth] Protected route accessed without authentication - redirecting to login');
+      safeRedirect(ROUTES.LOGIN);
+      return;
+    }
+    
+    // Case 2: Auth route with valid auth - redirect to dashboard
+    if (isAuthRoute(pathname) && user && hasTokenInStorage()) {
+      console.log('[Auth] Auth route accessed while authenticated - redirecting to dashboard');
+      safeRedirect(ROUTES.DASHBOARD);
+      return;
+    }
+  }, [user, pathname, loading, initialized]);
+  
+  // Helper to send email verification link
   const sendVerificationEmail = async (email: string): Promise<boolean> => {
     try {
       // API call would go here
@@ -189,9 +239,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
-  /**
-   * Verify email with token
-   */
+  // Helper to verify email with token
   const verifyEmail = async (token: string): Promise<boolean> => {
     try {
       // API call would go here
@@ -211,266 +259,152 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
-  // -------------------------
-  // INITIALIZATION EFFECT
-  // Only runs once on client-side mount
-  // -------------------------
-  useEffect(() => {
-    if (initialized) {
-      logAuth(" Init already completed, skipping");
-      return;
-    }
-    
-    logAuth(" Client initialization starting");
-    
-    try {
-      // Read from localStorage
-      const storedUser = getInitialUserFromStorage();
-      const hasToken = hasTokenInStorage();
-      
-      logAuth(" Initial auth state", { 
-        userExists: !!storedUser, 
-        tokenExists: hasToken,
-        currentPath: window.location.pathname
-      });
-      
-      // Update state based on storage
-      if (storedUser && hasToken) {
-        setUser(storedUser);
-      }
-      
-      // CRITICAL FIX: If user is authenticated and on an auth route,
-      // use a direct browser navigation to break any potential loops
-      const currentPath = window.location.pathname;
-      
-      if (storedUser && hasToken && isAuthRoute(currentPath)) {
-        logAuth(" Auth route with authenticated user - using direct navigation");
-        
-        // This is a "nuclear option" that bypasses Next.js router
-        // and forces a full page navigation to break any loops
-        window.location.href = '/redirect-to-dashboard.html';
-        return; // Don't proceed further if redirecting
-      }
-    } catch (error) {
-      logAuth(" Error during initialization", error);
-      // Clear potentially corrupted storage
-      clearUserAuth();
-    } finally {
-      // Always mark as initialized and not loading unless we redirected
-      setLoading(false);
-      setInitialized(true);
-      logAuth(" Initialization complete");
-    }
-  }, []); // Empty dependency array - run once on mount
-  
-  // -------------------------
-  // ROUTE PROTECTION EFFECT
-  // Runs on route changes or auth state changes
-  // -------------------------
-  useEffect(() => {
-    // NUCLEAR OPTION: Completely disable all route protection in development
-    // This comment is left here for documentation, but the effect is disabled
-    if (true) {
-      logAuth(" [NUCLEAR OPTION] All route protection completely disabled");
-      return;
-    }
-    
-    // The code below will never execute in development mode
-    // Don't run until initialization is complete
-    if (!initialized || loading) {
-      return;
-    }
-    
-    // If we don't have a pathname yet, skip (early render)
-    if (!pathname) {
-      return;
-    }
-    
-    // Skip all route protection
-    return;
-  }, [user, pathname, loading, initialized, router]);
-
-  /**
-   * Login function
-   * Authenticates user with API and handles local storage
-   */
+  // Login function
   const login = async (email: string, password: string): Promise<LoginResponse | null> => {
     try {
       logAuth('Login attempt', { email });
       
       // Mock a successful login for development
       // Create mock response data with the structure expected by LoginResponse
-      const mockResponseUser = {
+      const mockUser: User = {
         id: '1', 
         email: email, 
         firstName: 'Admin',
         lastName: 'User',
-        role: UserRole.ADMIN.toString(),
-        isEmailVerified: true
-      };
-      
-      const mockToken = 'mock-token-for-development-only';
-      
-      const mockResponse: LoginResponse = {
-        user: mockResponseUser,
-        accessToken: mockToken
-      };
-      
-      // Convert to full User type for our app state
-      const mockUser: User = {
-        id: mockResponseUser.id,
-        email: mockResponseUser.email,
-        name: `${mockResponseUser.firstName} ${mockResponseUser.lastName}`,
-        firstName: mockResponseUser.firstName,
-        lastName: mockResponseUser.lastName,
+        name: 'Admin User',
         role: UserRole.ADMIN,
-        isEmailVerified: mockResponseUser.isEmailVerified,
+        isEmailVerified: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
       
-      // Store the user and token in localStorage
-      persistUserAuth(mockUser, mockToken);
+      // Store the user data in localStorage for persistence
+      localStorage.setItem(AUTH.USER_KEY, JSON.stringify(mockUser));
       
-      // Update state
+      // Generate a mock token
+      const mockToken = 'jwt-mock-token-12345';
+      setAuthToken(mockToken);
+      
+      // Update the context state
       setUser(mockUser);
+      setToken(mockToken);
       
-      logAuth('Login successful - using direct navigation', { email });
-      
+      // Show success message
       toast({
         title: "Login successful",
         description: "Welcome back!",
       });
       
-      // Safer navigation in development mode
-      if (process.env.NODE_ENV === 'development') {
-        // In development, just stay on the current page
-        // The user can manually navigate using the UI
-        // This completely breaks any redirect loop potential
-        toast({
-          title: "Development Mode",
-          description: "Auth redirect disabled in dev mode. Click UI navigation to proceed.",
-          variant: "default",
-          duration: 5000
-        });
-      } else {
-        // In production, use direct navigation
-        window.location.href = '/redirect-to-dashboard.html';
-      }
+      // Generate a mock success response
+      const mockResponse: LoginResponse = {
+        success: true,
+        message: 'Login successful',
+        user: mockUser,
+        accessToken: mockToken
+      };
       
       return mockResponse;
-      
     } catch (error) {
+      // Handle error
       console.error('Login error:', error);
+      clearUserAuth();
+      setUser(null);
+      setToken(null);
+      
       toast({
         title: "Login failed",
         description: "Invalid email or password",
         variant: "destructive",
       });
+      
       return null;
     }
   };
-
-  /**
-   * Logout the current user
-   */
-  const logout = async (): Promise<void> => {
-    logAuth('Logout initiated');
-    
-    // Clear localStorage
-    clearUserAuth();
-    
-    // Update state
-    setUser(null);
-    
-    // Navigate to login
-    router.push(ROUTES.LOGIN);
-    
-    toast({
-      title: "Logged out",
-      description: "You have been logged out successfully",
-    });
+  
+  // Logout function
+  const logout = () => {
+    if (typeof window !== 'undefined') {
+      // Clear auth data from storage
+      setAuthToken(null);
+      localStorage.removeItem(AUTH.USER_KEY);
+      
+      // Reset state
+      setUser(null);
+      setToken(null);
+      
+      // Show logout confirmation
+      toast({
+        title: "Logged Out",
+        description: "You have been successfully logged out.",
+      });
+      
+      // Redirect to login page
+      safeRedirect(ROUTES.LOGIN);
+    }
   };
-
-  /**
-   * Register a new user
-   */
-  const register = async (email: string, password: string, name: string): Promise<boolean> => {
+  
+  // Register function
+  const register = async (userData: RegisterRequest): Promise<RegisterResponse | null> => {
     try {
-      logAuth('Registration attempt', { email });
+      console.log('Registration attempt', { email: userData.email });
       
-      // Create mock response data with the structure expected by LoginResponse
-      const firstName = name.split(' ')[0] || '';
-      const lastName = name.split(' ').slice(1).join(' ') || '';
-      
-      const mockResponseUser = {
-        id: Math.random().toString(36).substr(2, 9),
-        email,
-        firstName,
-        lastName,
-        role: UserRole.USER.toString(),
-        isEmailVerified: false
-      };
-      
-      const mockToken = 'mock-token-for-development-only';
-      
-      // Convert to full User type for our app state
+      // Create mock user
       const mockUser: User = {
-        id: mockResponseUser.id,
-        email: mockResponseUser.email,
-        name: name,
-        firstName,
-        lastName,
+        id: '2', 
+        email: userData.email, 
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        name: `${userData.firstName} ${userData.lastName}`,
         role: UserRole.USER,
-        isEmailVerified: mockResponseUser.isEmailVerified,
+        isEmailVerified: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
       
-      // Store user and token
-      persistUserAuth(mockUser, mockToken);
+      // Store the user data in localStorage for persistence
+      localStorage.setItem(AUTH.USER_KEY, JSON.stringify(mockUser));
       
-      // Update state
+      // Generate a mock token
+      const mockToken = 'jwt-mock-token-register-12345';
+      setAuthToken(mockToken);
+      
+      // Update the context state
       setUser(mockUser);
+      setToken(mockToken);
       
-      logAuth('Registration successful - using direct navigation', { email });
-      
+      // Show success message
       toast({
         title: "Registration successful",
         description: "Your account has been created",
       });
       
-      // Safer navigation in development mode
-      if (process.env.NODE_ENV === 'development') {
-        // In development, just stay on the current page
-        // The user can manually navigate using the UI
-        // This completely breaks any redirect loop potential
-        toast({
-          title: "Development Mode",
-          description: "Auth redirect disabled in dev mode. Click UI navigation to proceed.",
-          variant: "default",
-          duration: 5000
-        });
-      } else {
-        // In production, use direct navigation
-        window.location.href = '/redirect-to-dashboard.html';
-      }
+      // Generate a mock success response
+      const mockResponse: RegisterResponse = {
+        success: true,
+        message: 'Registration successful',
+        user: mockUser,
+        accessToken: mockToken
+      };
       
-      return true;
+      return mockResponse;
     } catch (error) {
+      // Handle error
       console.error('Registration error:', error);
+      clearUserAuth();
+      setUser(null);
+      setToken(null);
+      
       toast({
         title: "Registration failed",
         description: "There was an error creating your account",
         variant: "destructive",
       });
-      return false;
+      
+      return null;
     }
   };
-
-  /**
-   * Request a password reset link
-   */
+  
+  // Forgot password function
   const forgotPassword = async (email: string): Promise<boolean> => {
     try {
       // API call would go here
@@ -491,10 +425,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return false;
     }
   };
-
-  /**
-   * Reset password with token
-   */
+  
+  // Reset password function
   const resetPassword = async (token: string, password: string): Promise<boolean> => {
     try {
       // API call would go here
@@ -516,10 +448,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return false;
     }
   };
-
-  /**
-   * Update user data
-   */
+  
+  // Update user function
   const updateUser = (updatedUser: User): void => {
     if (!user) return;
     
@@ -534,10 +464,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       description: "Your profile has been updated successfully",
     });
   };
-
-  /**
-   * Change user password
-   */
+  
+  // Change password function
   const changePassword = async (currentPassword: string, newPassword: string): Promise<boolean> => {
     try {
       // API call would go here
@@ -557,23 +485,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return false;
     }
   };
-
+  
+  // Auth context provider function, returns an object with auth state and methods
   const contextValue: AuthContextType = {
     user,
+    token,
     loading,
+    initialized,
     login,
-    register,
     logout,
+    register,
     isAuthenticated,
-    hasRole,
-    sendVerificationEmail,
-    verifyEmail,
     forgotPassword,
     resetPassword,
     updateUser,
     changePassword,
-    currentPassword: '',
-    newPassword: '',
+    sendVerificationEmail,
+    verifyEmail,
+    hasRole
   };
 
   return (

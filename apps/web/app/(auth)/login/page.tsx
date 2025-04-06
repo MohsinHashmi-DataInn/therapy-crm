@@ -21,7 +21,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/contexts/auth-provider";
 import { ROUTES, API_ENDPOINTS } from "@/lib/constants";
 
 /**
@@ -46,25 +46,19 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showVerificationDialog, setShowVerificationDialog] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState("");
+  const [loginSuccessful, setLoginSuccessful] = useState(false);
   const [verificationSuccess, setVerificationSuccess] = useState(false);
   const [verificationLoading, setVerificationLoading] = useState(false);
   
-  // Anti-redirect mechanism
+  // Clean up any old redirect flags on mount - they're now handled by AuthProvider
   useEffect(() => {
-    // If we were redirected back here after a successful login, break the cycle
-    const loginSuccess = localStorage.getItem('login_success');
-    if (loginSuccess === 'true') {
-      console.log('Breaking redirect cycle - detected successful login');
-      localStorage.removeItem('login_success');
-      
-      // Show user a message
-      toast({
-        title: "Login successful",
-        description: "Please use the navigation menu to access the dashboard.",
-        variant: "default",
-      });
+    if (typeof window !== 'undefined') {
+      // Clear any outdated flags from older versions
+      sessionStorage.removeItem('prevent_all_redirects');
+      sessionStorage.removeItem('last_redirect_timestamp');
+      sessionStorage.removeItem('redirect_count');
     }
-  }, [toast]);
+  }, []);
   
   // Check if we need to show the resend verification dialog
   useEffect(() => {
@@ -91,65 +85,29 @@ export default function LoginPage() {
    */
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
+    setLoginSuccessful(false);
     
     try {
-      // IMPORTANT: Prevent all redirection mechanisms
-      // 1. Clear any sessionStorage flags that might trigger redirects
-      sessionStorage.clear();
-      // 2. Set a flag to indicate we're handling auth ourselves
-      localStorage.setItem('bypass_auth_provider', 'true');
-      // 3. Prepare a timestamp to detect loops
-      const loginAttemptTime = Date.now().toString();
-      localStorage.setItem('login_attempt_time', loginAttemptTime);
+      console.log("[LOGIN] Attempting to log in user");
       
-      // Perform the login API call
-      console.log("[LOGIN] Calling login API");
-      let success = false;
+      // Use the login function from AuthProvider
+      const result = await login(data.email, data.password);
       
-      try {
-        // First attempt using the auth context
-        const result = await login({ email: data.email, password: data.password });
-        success = !!result;
-      } catch (loginError) {
-        // If context method fails, this is our fallback for development
-        console.warn("[LOGIN] Auth context login failed, using backup method");
-        
-        // Development mode: Set mock user and bypass login API
-        const mockUser = {
-          id: '1',
-          email: data.email,
-          name: 'Test User',
-          firstName: 'Test',
-          lastName: 'User',
-          role: 'ADMIN',
-          isEmailVerified: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        
-        // Store the user in localStorage
-        localStorage.setItem('auth_user', JSON.stringify(mockUser));
-        localStorage.setItem('auth_token', 'dev-mode-token');
-        success = true;
-      }
-      
-      if (success) {
-        // Show a success message
-        toast({
-          title: "Login successful",
-          description: "Redirecting to dashboard...",
-          variant: "default",
-        });
-        
-        // CRITICAL: Use direct, immediate navigation to dashboard
-        // This completely bypasses Next.js router and any AuthProvider logic
-        console.log("[LOGIN] Directly navigating to dashboard");
-        window.location.replace(ROUTES.DASHBOARD); // Use replace to prevent back button issues
-      } else {
+      if (!result) {
         throw new Error("Login failed");
       }
+      
+      // Mark login as successful for UI purposes
+      setLoginSuccessful(true);
+      
+      console.log("[LOGIN] Login successful, AuthProvider will handle redirect");
+      
+      // The toast is now handled by the auth provider
+      
+      // Manual redirect button will show if the automatic redirect doesn't work
+      // This serves as a fallback mechanism
     } catch (error: any) {
-      console.error('[LOGIN] Error:', error);
+      console.error('[LOGIN] Login error:', error);
       
       // Show appropriate error message
       toast({
@@ -184,9 +142,19 @@ export default function LoginPage() {
     setVerificationLoading(true);
     
     try {
-      const success = await sendVerificationEmail(verificationEmail);
-      if (success) {
-        setVerificationSuccess(true);
+      // Check if sendVerificationEmail is defined before calling it
+      if (sendVerificationEmail) {
+        const success = await sendVerificationEmail(verificationEmail);
+        if (success) {
+          setVerificationSuccess(true);
+        }
+      } else {
+        // Fallback if the function is not available
+        toast({
+          title: "Not Implemented",
+          description: "Email verification is not currently available",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       toast({
@@ -263,6 +231,23 @@ export default function LoginPage() {
                 "Login"
               )}
             </Button>
+            {/* Display success message if login worked but redirect failed */}
+            {loginSuccessful && (
+              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md w-full">
+                <p className="text-green-800 font-medium">Login successful!</p>
+                <p className="text-sm text-green-600 mt-1">You should be redirected automatically.</p>
+                <Button 
+                  className="mt-4 w-full" 
+                  onClick={() => {
+                    // Use the safer replace method to avoid navigation history issues
+                    console.log('[LOGIN] Manual redirect button clicked');
+                    router.replace(ROUTES.DASHBOARD);
+                  }}
+                >
+                  Go to Dashboard
+                </Button>
+              </div>
+            )}
             <div className="w-full flex flex-col space-y-2">
               <p className="text-center text-sm text-muted-foreground">
                 Don't have an account?{" "}
@@ -323,13 +308,12 @@ export default function LoginPage() {
             </div>
           )}
           
-          <DialogFooter>
-            {verificationSuccess ? (
-              <Button type="button" onClick={closeVerificationDialog}>
-                Close
-              </Button>
-            ) : (
-              <Button type="button" onClick={handleResendVerification} disabled={verificationLoading}>
+          <DialogFooter className="mt-4">
+            {!verificationSuccess && (
+              <Button 
+                disabled={!verificationEmail || verificationLoading} 
+                onClick={handleResendVerification}
+              >
                 {verificationLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -340,6 +324,9 @@ export default function LoginPage() {
                 )}
               </Button>
             )}
+            <Button variant="outline" onClick={closeVerificationDialog}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
