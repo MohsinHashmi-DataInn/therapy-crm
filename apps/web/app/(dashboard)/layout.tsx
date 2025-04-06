@@ -5,6 +5,9 @@ import { MainNav } from "@/components/layout/main-nav";
 import { UserProfile } from "@/components/layout/user-profile";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/auth-provider";
+import { Loader2 } from "lucide-react";
+import { ROUTES } from "@/lib/constants";
 
 /**
  * Dashboard layout for authenticated pages
@@ -17,25 +20,15 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  // Use the auth context for authentication state
+  const { user, loading, isAuthenticated } = useAuth();
   
-  // Check authentication on component mount
+  // Redirect to login if not authenticated once loading is complete
   useEffect(() => {
-    const checkAuth = () => {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        // Redirect to login if no token found
-        router.push('/login');
-        return;
-      }
-      
-      setIsAuthenticated(true);
-      setIsLoading(false);
-    };
-    
-    checkAuth();
-  }, [router]);
+    if (!loading && !user) {
+      router.push(ROUTES.LOGIN);
+    }
+  }, [loading, user, router]);
   
   // Get the page title based on the current path
   const getPageTitle = (path: string) => {
@@ -48,10 +41,11 @@ export default function DashboardLayout({
   };
 
   // Show loading state while checking authentication
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
           <p className="text-lg font-medium mb-2">Loading...</p>
           <p className="text-sm text-muted-foreground">Please wait while we verify your credentials</p>
         </div>
@@ -60,7 +54,7 @@ export default function DashboardLayout({
   }
 
   // Only render dashboard content if authenticated
-  if (!isAuthenticated) {
+  if (!user || !isAuthenticated()) {
     return null; // Router will redirect, this prevents flash of dashboard content
   }
 

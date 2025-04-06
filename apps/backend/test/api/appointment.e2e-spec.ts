@@ -7,7 +7,7 @@ import * as pactum from 'pactum';
 import { initApp } from '../setup';
 import { PrismaService } from '../../src/common/prisma/prisma.service';
 import { CreateAppointmentDto, AppointmentType } from '../../src/modules/appointment/dto/create-appointment.dto';
-import { AppointmentStatus } from '@prisma/client';
+import { AppointmentStatus } from '../../src/types/prisma-models';
 import { UpdateAppointmentDto } from '../../src/modules/appointment/dto/update-appointment.dto';
 
 // User role enum to match the one in the controller

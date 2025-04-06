@@ -1,5 +1,6 @@
 import { ApiProperty, PartialType, OmitType } from '@nestjs/swagger';
-import { CreateInvoiceDto, CreateInvoiceItemDto, InvoiceStatus } from './create-invoice.dto';
+import { CreateInvoiceDto, CreateInvoiceItemDto } from './create-invoice.dto';
+import { InvoiceStatus } from '../../../types/prisma-models';
 import { IsOptional, IsArray, ValidateNested, IsEnum, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 

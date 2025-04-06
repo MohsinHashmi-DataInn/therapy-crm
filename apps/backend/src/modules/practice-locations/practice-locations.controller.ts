@@ -17,7 +17,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery }
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '../auth/guards/roles.guard';
+import { UserRole } from '../../types/prisma-models';
 import { PracticeLocationsService } from './practice-locations.service';
 import { CreatePracticeLocationDto } from './dto/create-practice-location.dto';
 import { UpdatePracticeLocationDto } from './dto/update-practice-location.dto';

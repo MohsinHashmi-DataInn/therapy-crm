@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../common/prisma/prisma.module';
+import { EmailModule } from '../../common/email/email.module';
 import { InsuranceProvidersService } from './insurance-providers.service';
 import { InsuranceProvidersController } from './insurance-providers.controller';
 import { FundingProgramsService } from './funding-programs.service';
@@ -12,14 +13,19 @@ import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 import { InsuranceClaimsService } from './insurance-claims.service';
 import { InsuranceClaimsController } from './insurance-claims.controller';
+import { BillingNotificationsService } from './services/billing-notifications.service';
+import { InvoicePdfService } from './services/invoice-pdf.service';
+import { BillingReportsService } from './services/billing-reports.service';
+import { ReportsController } from './reports.controller';
+import { InvoicePdfController } from './invoice-pdf.controller';
 
 /**
  * Module for billing and financial management
  * Handles insurance providers, funding programs, invoicing, 
- * payments, and insurance claim processing
+ * payments, insurance claim processing, reporting, and notifications
  */
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, EmailModule],
   controllers: [
     InsuranceProvidersController,
     FundingProgramsController,
@@ -27,6 +33,8 @@ import { InsuranceClaimsController } from './insurance-claims.controller';
     InvoicesController,
     PaymentsController,
     InsuranceClaimsController,
+    ReportsController,
+    InvoicePdfController,
   ],
   providers: [
     InsuranceProvidersService,
@@ -35,6 +43,9 @@ import { InsuranceClaimsController } from './insurance-claims.controller';
     InvoicesService,
     PaymentsService,
     InsuranceClaimsService,
+    BillingNotificationsService,
+    InvoicePdfService,
+    BillingReportsService,
   ],
   exports: [
     InsuranceProvidersService,
@@ -43,6 +54,9 @@ import { InsuranceClaimsController } from './insurance-claims.controller';
     InvoicesService,
     PaymentsService,
     InsuranceClaimsService,
+    BillingNotificationsService,
+    InvoicePdfService,
+    BillingReportsService,
   ],
 })
 export class BillingModule {}

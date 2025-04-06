@@ -14,7 +14,7 @@ export class CreateFundingProgramDto {
   @IsString()
   @MinLength(2)
   @MaxLength(100)
-  name: string;
+  name: string = '';
 
   @ApiProperty({
     description: 'Description of the funding program',

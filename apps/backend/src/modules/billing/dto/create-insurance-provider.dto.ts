@@ -13,7 +13,7 @@ export class CreateInsuranceProviderDto {
   @IsString()
   @MinLength(2)
   @MaxLength(100)
-  name: string;
+  name: string = '';
 
   @ApiProperty({
     description: 'Contact email for the insurance provider',

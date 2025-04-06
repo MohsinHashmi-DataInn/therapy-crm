@@ -14,7 +14,7 @@ import {
   ValidateIf, 
   ValidateNested 
 } from 'class-validator';
-import { AppointmentStatus } from '@prisma/client';
+import { AppointmentStatus } from '../../../types/prisma-models';
 import { CreateRecurrencePatternDto } from './create-recurrence-pattern.dto';
 
 // Define enums locally until they're available in Prisma client

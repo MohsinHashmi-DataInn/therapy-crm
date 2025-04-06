@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,7 +18,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
+import { ROUTES } from "@/lib/constants";
 
 /**
  * Login form schema with validation
@@ -36,9 +40,22 @@ type LoginFormValues = z.infer<typeof loginSchema>;
  */
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { login } = useAuth();
+  const { login, sendVerificationEmail } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [showVerificationDialog, setShowVerificationDialog] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
+  const [verificationSuccess, setVerificationSuccess] = useState(false);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  
+  // Check if we need to show the resend verification dialog
+  useEffect(() => {
+    const resend = searchParams.get("resend");
+    if (resend === "true") {
+      setShowVerificationDialog(true);
+    }
+  }, [searchParams]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -66,15 +83,54 @@ export default function LoginPage() {
         // Login method already shows toast errors
         console.log("Login failed");
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Login error:", error);
+      
       toast({
-        title: "Error",
-        description: "An unexpected error occurred",
+        title: "Login Failed",
+        description: error.message || "An unexpected error occurred",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  /**
+   * Handle resend verification email form submission
+   */
+  const handleResendVerification = async () => {
+    if (!verificationEmail) {
+      toast({
+        title: "Error",
+        description: "Please enter your email address",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setVerificationLoading(true);
+    
+    try {
+      const success = await sendVerificationEmail(verificationEmail);
+      if (success) {
+        setVerificationSuccess(true);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send verification email",
+        variant: "destructive",
+      });
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
+  
+  const closeVerificationDialog = () => {
+    setShowVerificationDialog(false);
+    setVerificationEmail("");
+    setVerificationSuccess(false);
   };
 
   return (
@@ -106,7 +162,7 @@ export default function LoginPage() {
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
                 <Link
-                  href="/forgot-password"
+                  href={ROUTES.FORGOT_PASSWORD}
                   className="text-sm text-primary underline-offset-4 hover:underline"
                 >
                   Forgot password?
@@ -124,22 +180,97 @@ export default function LoginPage() {
               )}
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col">
+          <CardFooter className="flex flex-col space-y-4">
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Logging in..." : "Login"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Logging in...
+                </>
+              ) : (
+                "Login"
+              )}
             </Button>
-            <p className="mt-4 text-center text-sm text-muted-foreground">
-              Don't have an account?{" "}
-              <Link
-                href="/register"
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                Register
-              </Link>
-            </p>
+            <div className="w-full flex flex-col space-y-2">
+              <p className="text-center text-sm text-muted-foreground">
+                Don't have an account?{" "}
+                <Link
+                  href={ROUTES.REGISTER}
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  Register
+                </Link>
+              </p>
+              <p className="text-center text-sm text-muted-foreground">
+                Haven't verified your email?{" "}
+                <button
+                  type="button"
+                  onClick={() => setShowVerificationDialog(true)}
+                  className="text-primary underline-offset-4 hover:underline bg-transparent border-none p-0 cursor-pointer inline"
+                >
+                  Resend verification email
+                </button>
+              </p>
+            </div>
           </CardFooter>
         </form>
       </Card>
+      
+      {/* Verification Email Dialog */}
+      <Dialog open={showVerificationDialog} onOpenChange={setShowVerificationDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Resend Verification Email</DialogTitle>
+            <DialogDescription>
+              Enter your email address to receive a new verification link.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {verificationSuccess ? (
+            <div className="py-6">
+              <Alert className="mb-4 border-green-600">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <AlertTitle>Email Sent</AlertTitle>
+                <AlertDescription>
+                  Verification email has been sent successfully. Please check your inbox.
+                </AlertDescription>
+              </Alert>
+            </div>
+          ) : (
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="verification-email">Email</Label>
+                <Input
+                  id="verification-email"
+                  type="email"
+                  placeholder="name@example.com"
+                  value={verificationEmail}
+                  onChange={(e) => setVerificationEmail(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            {verificationSuccess ? (
+              <Button type="button" onClick={closeVerificationDialog}>
+                Close
+              </Button>
+            ) : (
+              <Button type="button" onClick={handleResendVerification} disabled={verificationLoading}>
+                {verificationLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  "Send Verification Email"
+                )}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

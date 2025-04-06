@@ -3,9 +3,10 @@ import { PracticeService } from './practice.service';
 import { UpdatePracticeDto } from './dto/update-practice.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard'; 
-import { RolesGuard, UserRole } from './auth/guards/roles.guard'; 
+import { RolesGuard } from './auth/guards/roles.guard';
+import { UserRole } from '../types/prisma-models'; 
 import { Roles } from './auth/decorators/roles.decorator'; 
-import { Practice } from '@prisma/client'; 
+import { Practice } from '../types/prisma-models'; 
 
 @ApiTags('Practice')
 @ApiBearerAuth() 

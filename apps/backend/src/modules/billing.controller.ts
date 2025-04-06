@@ -19,7 +19,7 @@ import { UpdateBillingDto } from './dto/update-billing.dto';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard, UserRole } from './auth/guards/roles.guard';
 import { Roles } from './auth/decorators/roles.decorator';
-import { Practice } from '@prisma/client'; 
+import { Practice } from '../types/prisma-models';
 
 @ApiTags('Billing')
 @ApiBearerAuth() 

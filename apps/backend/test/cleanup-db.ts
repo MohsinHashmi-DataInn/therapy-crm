@@ -4,7 +4,7 @@ async function cleanDb() {
   const prisma = new PrismaClient();
   try {
     console.log('Deleting all users...');
-    await prisma.user.deleteMany({});
+    await prisma.users.deleteMany({});
     console.log('Database cleaned successfully');
   } catch (error) {
     console.error('Error cleaning database:', error);

@@ -1,8 +1,13 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User, UserRole, NotificationPreference } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { UserRole } from '../../types/prisma-models';
+
+// Define types locally until we resolve import issues
+type User = any;
+type NotificationPreference = any;
 import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 import * as bcrypt from 'bcrypt';
 
@@ -30,7 +35,7 @@ export class UserService {
       console.log('UserService.create - Creating user with email:', createUserDto.email);
       
       // Check if email already exists
-      const existingUser = await this.prismaService.user.findUnique({
+      const existingUser = await this.prismaService.users.findUnique({
         where: { email: createUserDto.email },
       });
 
@@ -50,7 +55,7 @@ export class UserService {
         email: createUserDto.email,
         password: hashedPassword,
         phone: createUserDto.phone,
-        role: createUserDto.role || UserRole.STAFF,
+        role: createUserDto.role || UserRole.RECEPTIONIST, // Using RECEPTIONIST as default role
         isActive: true,
         createdBy: createdById ? createdById : null,
         // Use proper Prisma types for dates - use undefined instead of null
@@ -65,7 +70,7 @@ export class UserService {
 
       // Create user
       try {
-        const user = await this.prismaService.user.create({
+        const user = await this.prismaService.users.create({
           data: defaultUserData,
         }) as unknown as User;
         
@@ -101,7 +106,7 @@ export class UserService {
    * @returns Array of users without passwords
    */
   async findAll(): Promise<SerializedUser[]> {
-    const users = await this.prismaService.user.findMany() as unknown as User[];
+    const users = await this.prismaService.users.findMany() as unknown as User[];
     return users.map(user => {
       // Convert id from BigInt to string for JSON serialization
       const { password, ...userWithoutPassword } = user;
@@ -121,7 +126,7 @@ export class UserService {
    */
   async findOne(id: bigint): Promise<SerializedUser> {
     try {
-      const user = await this.prismaService.user.findUnique({
+      const user = await this.prismaService.users.findUnique({
         where: { id },
       }) as unknown as User;
 
@@ -150,35 +155,93 @@ export class UserService {
    * @param email - User's email
    * @returns User or null if not found
    */
-  async findByEmail(email: string): Promise<User | null> {
-    this.logger.log(`[DEBUG] Searching for user by email: ${email}`);
-    console.log(`[DEBUG] findByEmail - Searching database for user with email: ${email}`);
+  async findByEmail(email: string) {
+    this.logger.log(`Finding user by email: ${email}`);
     
     try {
-      const user = await this.prismaService.user.findUnique({
+      const user = await this.prismaService.users.findUnique({
         where: { email },
-      }) as unknown as User | null;
+      });
       
-      if (user) {
-        this.logger.log(`[DEBUG] User found with email: ${email}, ID: ${user.id?.toString()}, Role: ${user.role}`);
-        console.log(`[DEBUG] findByEmail - User found:`, {
-          id: user.id?.toString(),
-          email: user.email,
-          role: user.role,
-          isActive: user.isActive,
-          hasPassword: !!user.password,
-          passwordLength: user.password?.length || 0
-        });
-      } else {
-        this.logger.warn(`[DEBUG] No user found with email: ${email}`);
-        console.log(`[DEBUG] findByEmail - No user found with email: ${email}`);
+      if (!user) {
+        this.logger.warn(`User not found with email: ${email}`);
+        return null;
       }
       
-      return user;
+      return this.mapUserResponse(user);
     } catch (error) {
-      this.logger.error(`[DEBUG] Error finding user by email: ${email}`, error);
-      console.error(`[DEBUG] findByEmail - Database error:`, error);
-      throw error;
+      this.logger.error(
+        `Error finding user by email: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.stack : undefined
+      );
+      
+      throw new InternalServerErrorException('Error finding user by email');
+    }
+  }
+  
+  /**
+   * Find a user by their email verification token
+   * @param token - Email verification token
+   * @returns User object or null if not found
+   */
+  async findByEmailVerificationToken(token: string) {
+    this.logger.log('Finding user by email verification token');
+    
+    try {
+      const users = await this.prismaService.$queryRaw`
+        SELECT * FROM "users" 
+        WHERE "email_verification_token" = ${token} 
+        LIMIT 1
+      `;
+      
+      const user = Array.isArray(users) && users.length > 0 ? users[0] : null;
+      
+      if (!user) {
+        this.logger.warn('No user found with the provided email verification token');
+        return null;
+      }
+      
+      return this.mapUserResponse(user);
+    } catch (error) {
+      this.logger.error(
+        `Error finding user by email verification token: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.stack : undefined
+      );
+      
+      throw new InternalServerErrorException('Error finding user by email verification token');
+    }
+  }
+  
+  /**
+   * Find a user by their password reset token
+   * @param token - Password reset token
+   * @returns User object or null if not found
+   */
+  async findByPasswordResetToken(token: string) {
+    this.logger.log('Finding user by password reset token');
+    
+    try {
+      const users = await this.prismaService.$queryRaw`
+        SELECT * FROM "users" 
+        WHERE "password_reset_token" = ${token} 
+        LIMIT 1
+      `;
+      
+      const user = Array.isArray(users) && users.length > 0 ? users[0] : null;
+      
+      if (!user) {
+        this.logger.warn('No user found with the provided password reset token');
+        return null;
+      }
+      
+      return this.mapUserResponse(user);
+    } catch (error) {
+      this.logger.error(
+        `Error finding user by password reset token: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.stack : undefined
+      );
+      
+      throw new InternalServerErrorException('Error finding user by password reset token');
     }
   }
 
@@ -203,7 +266,7 @@ export class UserService {
     data.updatedBy = updatedById;
 
     // Update user
-    const updatedUser = await this.prismaService.user.update({
+    const updatedUser = await this.prismaService.users.update({
       where: { id },
       data,
     }) as unknown as User;
@@ -228,7 +291,7 @@ export class UserService {
     await this.findOne(id);
 
     // Delete user
-    const deletedUser = await this.prismaService.user.delete({
+    const deletedUser = await this.prismaService.users.delete({
       where: { id },
     }) as unknown as User;
 
@@ -247,11 +310,189 @@ export class UserService {
    * @param userId - The ID of the user
    * @returns Notification preferences object
    */
+  /**
+   * Update the email verification token for a user
+   * @param userId - User ID
+   * @param token - Email verification token
+   * @param expiryDate - Expiry date for the token
+   * @returns Updated user object
+   */
+  async updateEmailVerificationToken(userId: bigint, token: string, expiryDate: Date) {
+    this.logger.log(`Updating email verification token for user ID: ${userId.toString()}`);
+    
+    try {
+      await this.prismaService.$executeRaw`
+        UPDATE "users" 
+        SET "email_verification_token" = ${token}, 
+            "email_verification_token_expires" = ${expiryDate} 
+        WHERE "id" = ${userId}
+      `;
+      
+      const users = await this.prismaService.$queryRaw`
+        SELECT * FROM "users" 
+        WHERE "id" = ${userId} 
+        LIMIT 1
+      `;
+      
+      const updatedUser = Array.isArray(users) && users.length > 0 ? users[0] : null;
+      
+      return this.mapUserResponse(updatedUser);
+    } catch (error) {
+      this.logger.error(
+        `Error updating email verification token: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.stack : undefined
+      );
+      
+      throw new InternalServerErrorException('Error updating email verification token');
+    }
+  }
+  
+  /**
+   * Mark a user's email as verified
+   * @param userId - User ID
+   * @returns Updated user object
+   */
+  async markEmailAsVerified(userId: bigint) {
+    this.logger.log(`Marking email as verified for user ID: ${userId.toString()}`);
+    
+    try {
+      await this.prismaService.$executeRaw`
+        UPDATE "users" 
+        SET "is_email_verified" = true, 
+            "email_verification_token" = NULL, 
+            "email_verification_token_expires" = NULL 
+        WHERE "id" = ${userId}
+      `;
+      
+      const users = await this.prismaService.$queryRaw`
+        SELECT * FROM "users" 
+        WHERE "id" = ${userId} 
+        LIMIT 1
+      `;
+      
+      const updatedUser = Array.isArray(users) && users.length > 0 ? users[0] : null;
+      
+      return this.mapUserResponse(updatedUser);
+    } catch (error) {
+      this.logger.error(
+        `Error marking email as verified: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.stack : undefined
+      );
+      
+      throw new InternalServerErrorException('Error marking email as verified');
+    }
+  }
+  
+  /**
+   * Update the password reset token for a user
+   * @param userId - User ID
+   * @param token - Password reset token
+   * @param expiryDate - Expiry date for the token
+   * @returns Updated user object
+   */
+  async updatePasswordResetToken(userId: bigint, token: string, expiryDate: Date) {
+    this.logger.log(`Updating password reset token for user ID: ${userId.toString()}`);
+    
+    try {
+      await this.prismaService.$executeRaw`
+        UPDATE "users" 
+        SET "password_reset_token" = ${token}, 
+            "password_reset_expires" = ${expiryDate} 
+        WHERE "id" = ${userId}
+      `;
+      
+      const users = await this.prismaService.$queryRaw`
+        SELECT * FROM "users" 
+        WHERE "id" = ${userId} 
+        LIMIT 1
+      `;
+      
+      const updatedUser = Array.isArray(users) && users.length > 0 ? users[0] : null;
+      
+      return this.mapUserResponse(updatedUser);
+    } catch (error) {
+      this.logger.error(
+        `Error updating password reset token: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.stack : undefined
+      );
+      
+      throw new InternalServerErrorException('Error updating password reset token');
+    }
+  }
+  
+  /**
+   * Reset a user's password
+   * @param userId - User ID
+   * @param newPassword - New hashed password
+   * @returns Updated user object
+   */
+  async resetPassword(userId: bigint, newPassword: string) {
+    this.logger.log(`Resetting password for user ID: ${userId.toString()}`);
+    
+    try {
+      const now = new Date();
+      
+      await this.prismaService.$executeRaw`
+        UPDATE "users" 
+        SET "password" = ${newPassword}, 
+            "password_reset_token" = NULL, 
+            "password_reset_expires" = NULL, 
+            "last_password_change" = ${now} 
+        WHERE "id" = ${userId}
+      `;
+      
+      const users = await this.prismaService.$queryRaw`
+        SELECT * FROM "users" 
+        WHERE "id" = ${userId} 
+        LIMIT 1
+      `;
+      
+      const updatedUser = Array.isArray(users) && users.length > 0 ? users[0] : null;
+      
+      return this.mapUserResponse(updatedUser);
+    } catch (error) {
+      this.logger.error(
+        `Error resetting password: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.stack : undefined
+      );
+      
+      throw new InternalServerErrorException('Error resetting password');
+    }
+  }
+  
+  /**
+   * Map user DB model to response object
+   * @param user - User from database
+   * @returns User response object
+   */
+  private mapUserResponse(user: any) {
+    return {
+      id: user.id,
+      email: user.email,
+      password: user.password,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      phone: user.phone,
+      role: user.role,
+      isActive: user.is_active,
+      createdAt: user.created_at,
+      updatedAt: user.updated_at,
+      createdBy: user.created_by,
+      updatedBy: user.updated_by,
+      isEmailVerified: user.is_email_verified,
+      emailVerificationToken: user.email_verification_token,
+      emailVerificationTokenExpires: user.email_verification_token_expires,
+      passwordResetToken: user.password_reset_token,
+      passwordResetExpires: user.password_reset_expires,
+      lastPasswordChange: user.last_password_change,
+    };
+  }
+
   async getNotificationPreferences(userId: bigint): Promise<NotificationPreference | null> {
     this.logger.log(`Fetching notification preferences for user ID: ${userId}`);
     // TODO: Implement database logic to retrieve preferences based on userId
     // Example placeholder implementation:
-    const preferences = await this.prismaService.notificationPreference.findUnique({ // Assuming a model named NotificationPreference
+    const preferences = await this.prismaService.notification_preferences.findUnique({ 
       where: { userId: userId },
     });
 
@@ -287,7 +528,7 @@ export class UserService {
     // TODO: Add validation for preferencesData (already handled by DTO)
     // TODO: Implement database logic to update or create preferences
     // Example placeholder implementation (upsert):
-    const updatedPreferences = await this.prismaService.notificationPreference.upsert({
+    const updatedPreferences = await this.prismaService.notification_preferences.upsert({
       where: { userId: userId },
       update: { ...preferencesData, userId }, // Ensure userId is included if needed for update
       create: { ...preferencesData, userId }, // Ensure userId is linked on creation

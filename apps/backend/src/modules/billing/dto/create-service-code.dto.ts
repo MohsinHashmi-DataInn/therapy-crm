@@ -14,7 +14,7 @@ export class CreateServiceCodeDto {
   @IsString()
   @MinLength(2)
   @MaxLength(20)
-  code: string;
+  code: string = '';
 
   @ApiProperty({
     description: 'Description of the service',
@@ -24,7 +24,7 @@ export class CreateServiceCodeDto {
   @IsString()
   @MinLength(2)
   @MaxLength(200)
-  description: string;
+  description: string = '';
 
   @ApiProperty({
     description: 'Default rate for the service in dollars',
@@ -34,7 +34,7 @@ export class CreateServiceCodeDto {
   @IsNumber()
   @Min(0)
   @Type(() => Number)
-  defaultRate: number;
+  defaultRate: number = 0;
 
   @ApiProperty({
     description: 'Unit of measure for the service (e.g., 15 min, hour, session)',
@@ -43,7 +43,7 @@ export class CreateServiceCodeDto {
   @IsNotEmpty()
   @IsString()
   @MaxLength(50)
-  unit: string;
+  unit: string = '';
 
   @ApiProperty({
     description: 'Detailed information about when to use this code',

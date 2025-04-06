@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { UpdateBillingDto } from './dto/update-billing.dto';
-import { Practice } from '@prisma/client';
+import { Practice } from '../types/prisma-models';
 
 @Injectable()
 export class BillingService {
@@ -23,12 +23,12 @@ export class BillingService {
       where: { id: this.practiceId },
       select: {
         id: true,
-        billingName: true,
-        billingEmail: true,
-        billingAddress: true,
-        billingCity: true,
-        billingState: true,
-        billingZipCode: true,
+        billing_name: true,
+        billing_email: true,
+        billing_address: true,
+        billing_city: true,
+        billing_state: true,
+        billing_zip_code: true,
         // Include Stripe fields if you want to display subscription status etc.
         // stripeCustomerId: true,
         // stripeSubscriptionId: true,
@@ -40,12 +40,12 @@ export class BillingService {
       this.logger.warn(`Practice not found with ID: ${this.practiceId}. Returning empty template.`);
       // Return an empty billing template instead of throwing an exception
       return {
-        billingName: '',
-        billingEmail: '',
-        billingAddress: '',
-        billingCity: '',
-        billingState: '',
-        billingZipCode: ''
+        billing_name: '',
+        billing_email: '',
+        billing_address: '',
+        billing_city: '',
+        billing_state: '',
+        billing_zip_code: ''
       };
     }
     this.logger.log(`Successfully retrieved billing info for practice ID: ${this.practiceId}`);
@@ -68,17 +68,17 @@ export class BillingService {
         where: { id: this.practiceId },
         data: {
           ...updateBillingDto,
-          updatedAt: new Date(), // Explicitly set updatedAt
+          updated_at: new Date(), // Explicitly set updated_at
         },
         select: {
           id: true,
-          billingName: true,
-          billingEmail: true,
-          billingAddress: true,
-          billingCity: true,
-          billingState: true,
-          billingZipCode: true,
-          updatedAt: true,
+          billing_name: true,
+          billing_email: true,
+          billing_address: true,
+          billing_city: true,
+          billing_state: true,
+          billing_zip_code: true,
+          updated_at: true,
         },
       });
       this.logger.log(

@@ -4,7 +4,7 @@ import { PrismaService } from '../../src/common/prisma/prisma.service';
 import { TEST_USERS } from '../setup';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from '../../src/modules/user/dto/create-user.dto';
-import { UserRole } from '@prisma/client';
+import { UserRole } from '../../src/modules/auth/guards/roles.guard';
 
 /**
  * Mock AuthService for testing purposes
@@ -27,7 +27,7 @@ export class MockAuthService {
     
     try {
       // Check if user with this email already exists
-      const existingUser = await this.prismaService.user.findUnique({
+      const existingUser = await this.prismaService.users.findUnique({
         where: { email: createUserDto.email }
       });
       
@@ -45,15 +45,17 @@ export class MockAuthService {
       const hashedPassword = await bcrypt.hash(createUserDto.password, SALT_ROUNDS);
       
       // Create the user in the database
-      const user = await this.prismaService.user.create({
+      const user = await this.prismaService.users.create({
         data: {
           email: createUserDto.email,
           password: hashedPassword,
-          firstName: createUserDto.firstName,
-          lastName: createUserDto.lastName,
+          first_name: createUserDto.firstName,
+          last_name: createUserDto.lastName,
           role: createUserDto.role || UserRole.THERAPIST,
           phone: createUserDto.phone,
-          isActive: true,
+          is_active: true,
+          created_at: new Date(),
+          updated_at: new Date(),
         },
       });
       
@@ -72,14 +74,15 @@ export class MockAuthService {
       const token = this.jwtService.sign(payload);
       console.log('MockAuthService.register - Generated token:', token);
       
-      // Return token and user info
+      // Extract user data without password
+      const { password, ...userData } = user;
       return {
         accessToken: token,
         user: {
           id: user.id.toString(),
           email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
+          firstName: user.first_name,
+          lastName: user.last_name,
           role: user.role,
         },
       };
@@ -121,7 +124,7 @@ export class MockAuthService {
         console.log('MockAuthService.login - Admin test user detected, bypassing verification');
         
         // Find the actual admin user in the database
-        const dbUser = await this.prismaService.user.findUnique({
+        const dbUser = await this.prismaService.users.findUnique({
           where: { email: TEST_USERS.admin.email }
         });
         
@@ -151,8 +154,8 @@ export class MockAuthService {
           user: {
             id: dbUser.id.toString(),
             email: dbUser.email,
-            firstName: dbUser.firstName,
-            lastName: dbUser.lastName,
+            firstName: dbUser.first_name,
+            lastName: dbUser.last_name,
             role: dbUser.role,
           },
         };
@@ -160,7 +163,7 @@ export class MockAuthService {
         console.log('MockAuthService.login - Staff test user detected, bypassing verification');
         
         // Find the actual staff user in the database
-        const dbUser = await this.prismaService.user.findUnique({
+        const dbUser = await this.prismaService.users.findUnique({
           where: { email: TEST_USERS.staff.email }
         });
         
@@ -190,8 +193,8 @@ export class MockAuthService {
           user: {
             id: dbUser.id.toString(),
             email: dbUser.email,
-            firstName: dbUser.firstName,
-            lastName: dbUser.lastName,
+            firstName: dbUser.first_name,
+            lastName: dbUser.last_name,
             role: dbUser.role,
           },
         };
@@ -200,7 +203,7 @@ export class MockAuthService {
         console.log('MockAuthService.login - Regular user login attempt');
         
         // Find the user in the database
-        const user = await this.prismaService.user.findUnique({
+        const user = await this.prismaService.users.findUnique({
           where: { email: loginDto.email }
         });
         
@@ -238,8 +241,8 @@ export class MockAuthService {
           user: {
             id: user.id.toString(),
             email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
+            firstName: user.first_name,
+            lastName: user.last_name,
             role: user.role,
           },
         };

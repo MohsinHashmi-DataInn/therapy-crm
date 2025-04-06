@@ -1,9 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { CreateInsuranceClaimDto, ClaimStatus } from './dto/create-insurance-claim.dto';
+import { CreateInsuranceClaimDto } from './dto/create-insurance-claim.dto';
 import { UpdateInsuranceClaimDto } from './dto/update-insurance-claim.dto';
-import { PaymentMethod } from './dto/create-payment.dto';
-import { InvoiceStatus } from './dto/create-invoice.dto';
+import { PaymentMethod, ClaimStatus, InvoiceStatus } from '../../types/prisma-models';
 
 /**
  * Service for managing insurance claims
@@ -23,16 +22,17 @@ export class InsuranceClaimsService {
    * @throws NotFoundException if the invoice or insurance provider doesn't exist
    * @throws BadRequestException if the invoice has no items to claim
    */
-  async create(createInsuranceClaimDto: CreateInsuranceClaimDto, userId: bigint) {
+  async create(createInsuranceClaimDto: CreateInsuranceClaimDto, userId: string) {
     try {
       const invoiceId = BigInt(createInsuranceClaimDto.invoiceId);
-      const insuranceProviderId = BigInt(createInsuranceClaimDto.insuranceProviderId);
+      const insuranceId = BigInt(createInsuranceClaimDto.insuranceId);
+      const userIdBigInt = BigInt(userId);
       
       // Check if invoice exists
-      const invoice = await this.prisma.invoice.findUnique({
+      const invoice = await this.prisma.invoices.findFirst({
         where: { id: invoiceId },
         include: {
-          items: true,
+          invoice_line_items: true,
         },
       });
 
@@ -40,25 +40,26 @@ export class InsuranceClaimsService {
         throw new NotFoundException(`Invoice with ID ${createInsuranceClaimDto.invoiceId} not found`);
       }
       
-      // Check if insurance provider exists
-      const insuranceProvider = await this.prisma.insuranceProvider.findUnique({
-        where: { id: insuranceProviderId },
+      // Check if client insurance exists
+      const clientInsurance = await this.prisma.client_insurance.findFirst({
+        where: { id: insuranceId },
       });
 
-      if (!insuranceProvider) {
-        throw new NotFoundException(`Insurance provider with ID ${createInsuranceClaimDto.insuranceProviderId} not found`);
+      if (!clientInsurance) {
+        throw new NotFoundException(`Client insurance with ID ${createInsuranceClaimDto.insuranceId} not found`);
       }
       
       // Determine which invoice items to include in the claim
-      let claimItems = invoice.items;
+      let claimItems = invoice.invoice_line_items;
       
       if (createInsuranceClaimDto.invoiceItemIds && createInsuranceClaimDto.invoiceItemIds.length > 0) {
         // Filter to only include specified items
         const itemIds = createInsuranceClaimDto.invoiceItemIds.map(id => BigInt(id));
-        claimItems = invoice.items.filter(item => itemIds.includes(item.id));
+        claimItems = invoice.invoice_line_items.filter(item => itemIds.includes(item.id));
       } else {
-        // If not specified, only include items marked for insurance billing
-        claimItems = invoice.items.filter(item => item.billToInsurance);
+        // If not specified, only include all items
+        // Note: invoice_line_items may not have billToInsurance field, using all items
+        claimItems = invoice.invoice_line_items;
       }
       
       if (claimItems.length === 0) {
@@ -67,58 +68,54 @@ export class InsuranceClaimsService {
       
       // Calculate the total claim amount
       const claimAmount = claimItems.reduce(
-        (sum, item) => sum + Number(item.amount),
+        (sum, item) => sum + (Number(item.quantity) * Number(item.unit_price)),
         0
       );
       
       return this.prisma.$transaction(async (prisma) => {
         // Create the claim
-        const claim = await prisma.insuranceClaim.create({
+        const claim = await prisma.insurance_claims.create({
           data: {
-            invoiceId,
-            insuranceProviderId,
-            policyNumber: createInsuranceClaimDto.policyNumber,
-            beneficiaryName: createInsuranceClaimDto.beneficiaryName,
-            submissionDate: createInsuranceClaimDto.submissionDate 
+            invoice_id: invoiceId,
+            insurance_id: insuranceId,
+            claim_number: createInsuranceClaimDto.claimNumber,
+            submission_date: createInsuranceClaimDto.submissionDate 
               ? new Date(createInsuranceClaimDto.submissionDate) 
-              : undefined,
-            status: createInsuranceClaimDto.status || ClaimStatus.DRAFT,
-            claimNumber: createInsuranceClaimDto.claimNumber,
+              : new Date(),
+            status: createInsuranceClaimDto.status || ClaimStatus.PENDING,
+            amount_claimed: createInsuranceClaimDto.amountClaimed || claimAmount.toString(),
+            amount_approved: createInsuranceClaimDto.amountApproved,
+            denial_reason: createInsuranceClaimDto.denialReason,
             notes: createInsuranceClaimDto.notes,
-            claimAmount,
-            autoGeneratePayment: createInsuranceClaimDto.autoGeneratePayment ?? true,
-            createdById: userId,
+            follow_up_date: createInsuranceClaimDto.followUpDate 
+              ? new Date(createInsuranceClaimDto.followUpDate) 
+              : null,
+            created_by: userIdBigInt,
+            updated_at: new Date(),
           },
         });
         
-        // Associate invoice items with the claim
-        for (const item of claimItems) {
-          await prisma.insuranceClaimItem.create({
-            data: {
-              claimId: claim.id,
-              invoiceItemId: item.id,
-              claimedAmount: Number(item.amount),
-            },
-          });
-        }
+        // Note: Since there's no dedicated insurance_claim_items model in the schema,
+        // we're not creating claim items. If this functionality is needed,
+        // the schema would need to be updated to include an insurance_claim_items table.
         
-        // If status is not DRAFT, update the invoice status to PENDING_INSURANCE
-        if (claim.status !== ClaimStatus.DRAFT && invoice.status !== InvoiceStatus.PENDING_INSURANCE) {
-          await prisma.invoice.update({
+        // If claim is created, update the invoice status to PENDING
+        if (invoice.status !== InvoiceStatus.PENDING) {
+          await prisma.invoices.update({
             where: { id: invoiceId },
             data: {
-              status: InvoiceStatus.PENDING_INSURANCE,
+              status: InvoiceStatus.PENDING,
             },
           });
         }
         
-        return this.findOne(claim.id);
+        return this.findOne(claim.id.toString());
       });
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
       }
-      this.logger.error(`Failed to create insurance claim: ${error.message}`, error.stack);
+      this.logger.error(`Failed to create insurance claim: ${error instanceof Error ? error.message : 'Unknown error'}`, error instanceof Error ? error.stack : undefined);
       throw error;
     }
   }
@@ -128,97 +125,83 @@ export class InsuranceClaimsService {
    * @param filters - Optional filters for claims
    * @returns List of claims matching the criteria
    */
-  async findAll(filters: {
+  async findAll(filters?: {
     status?: ClaimStatus;
-    insuranceProviderId?: string;
+    insuranceId?: string;
     from?: string;
     to?: string;
     clientId?: string;
     limit?: number;
-    offset?: number;
+    page?: number;
   }) {
     try {
       // Build where clause based on filters
       const where: any = {};
       
-      if (filters.status) {
+      if (filters?.status) {
         where.status = filters.status;
       }
       
-      if (filters.insuranceProviderId) {
-        where.insuranceProviderId = BigInt(filters.insuranceProviderId);
+      if (filters?.insuranceId) {
+        where.insurance_id = BigInt(filters.insuranceId);
       }
       
       // Submission date range filtering
-      if (filters.from || filters.to) {
-        where.submissionDate = {};
-        if (filters.from) {
-          where.submissionDate.gte = new Date(filters.from);
+      if (filters?.from || filters?.to) {
+        where.submission_date = {};
+        
+        if (filters?.from) {
+          where.submission_date.gte = new Date(filters.from);
         }
-        if (filters.to) {
-          where.submissionDate.lte = new Date(filters.to);
+        
+        if (filters?.to) {
+          where.submission_date.lte = new Date(filters.to);
         }
       }
       
-      // Filter by client ID
-      if (filters.clientId) {
-        where.invoice = {
-          clientId: BigInt(filters.clientId),
+      // Client filtering
+      if (filters?.clientId) {
+        where.invoices = {
+          client_id: BigInt(filters.clientId),
         };
       }
       
       // Query for total count (for pagination)
-      const totalCount = await this.prisma.insuranceClaim.count({ where });
+      const totalCount = await this.prisma.insurance_claims.count({ where });
       
       // Set default pagination values if not provided
-      const limit = filters.limit || 50;
-      const offset = filters.offset || 0;
+      const limit = filters?.limit || 50;
+      const page = filters?.page || 1;
       
       // Query for claims with pagination
-      const claims = await this.prisma.insuranceClaim.findMany({
+      const claims = await this.prisma.insurance_claims.findMany({
         where,
         include: {
-          invoice: {
-            select: {
-              id: true,
-              invoiceNumber: true,
-              clientId: true,
-              client: {
-                select: {
-                  id: true,
-                  firstName: true,
-                  lastName: true,
-                },
-              },
-            },
-          },
-          insuranceProvider: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          _count: {
-            select: {
-              items: true,
-            },
-          },
+          invoices: true,
+          client_insurance: true,
         },
-        orderBy: [
-          { submissionDate: 'desc' },
-          { createdAt: 'desc' },
-        ],
+        orderBy: {
+          submission_date: 'desc',
+          created_at: 'desc',
+        },
+        skip: (page - 1) * limit,
         take: limit,
-        skip: offset,
       });
       
       return {
-        totalCount,
-        claims,
+        data: claims,
+        meta: {
+          total: totalCount,
+          page: page,
+          limit: limit,
+          pages: Math.ceil(totalCount / limit),
+        },
       };
     } catch (error) {
-      this.logger.error(`Failed to fetch insurance claims: ${error.message}`, error.stack);
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : '';
+      this.logger.error(`Error finding insurance claims: ${errorMessage}`, errorStack);
+      throw new BadRequestException(`Failed to retrieve insurance claims: ${errorMessage}`);
     }
   }
 
@@ -228,45 +211,20 @@ export class InsuranceClaimsService {
    * @returns The claim if found
    * @throws NotFoundException if the claim doesn't exist
    */
-  async findOne(id: bigint) {
+  async findOne(id: string) {
     try {
-      const claim = await this.prisma.insuranceClaim.findUnique({
-        where: { id },
+      const claimId = BigInt(id);
+      
+      const claim = await this.prisma.insurance_claims.findFirst({
+        where: { id: claimId },
         include: {
-          invoice: {
-            select: {
-              id: true,
-              invoiceNumber: true,
-              clientId: true,
-              totalAmount: true,
-              client: {
-                select: {
-                  id: true,
-                  firstName: true,
-                  lastName: true,
-                  dateOfBirth: true,
-                  address: true,
-                },
-              },
-            },
-          },
-          insuranceProvider: true,
-          items: {
+          invoices: {
             include: {
-              invoiceItem: {
-                include: {
-                  serviceCode: true,
-                },
-              },
+              clients: true,
+              invoice_line_items: true,
             },
           },
-          createdBy: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
+          client_insurance: true,
         },
       });
 
@@ -279,7 +237,9 @@ export class InsuranceClaimsService {
       if (error instanceof NotFoundException) {
         throw error;
       }
-      this.logger.error(`Failed to fetch insurance claim with ID ${id}: ${error.message}`, error.stack);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to fetch insurance claim with ID ${id}: ${errorMessage}`, errorStack);
       throw error;
     }
   }
@@ -292,219 +252,117 @@ export class InsuranceClaimsService {
    * @throws NotFoundException if the claim doesn't exist
    * @throws BadRequestException if trying to modify a submitted claim
    */
-  async update(id: bigint, updateInsuranceClaimDto: UpdateInsuranceClaimDto) {
+  async update(id: string, updateInsuranceClaimDto: UpdateInsuranceClaimDto, userId: bigint) {
     try {
+      const claimId = BigInt(id);
+      
       // Check if claim exists
-      const claim = await this.prisma.insuranceClaim.findUnique({
-        where: { id },
+      const existingClaim = await this.prisma.insurance_claims.findFirst({
+        where: { id: claimId },
         include: {
-          invoice: {
-            include: {
-              items: true,
-            },
-          },
-          items: {
-            include: {
-              invoiceItem: true,
-            },
-          },
+          invoices: true,
         },
       });
 
-      if (!claim) {
+      if (!existingClaim) {
         throw new NotFoundException(`Insurance claim with ID ${id} not found`);
       }
 
-      // Check if trying to modify items for a submitted claim
-      if (
-        claim.status !== ClaimStatus.DRAFT && 
-        !updateInsuranceClaimDto.status &&
-        (updateInsuranceClaimDto.invoiceItemsToAdd || updateInsuranceClaimDto.invoiceItemsToRemove)
-      ) {
-        throw new BadRequestException(
-          `Cannot modify items for a claim with status ${claim.status}. Change status to DRAFT first or only update the status.`
-        );
+      // Prepare update data
+      const updateData: any = {
+        updated_at: new Date(),
+      };
+      
+      if (updateInsuranceClaimDto.insuranceId) {
+        updateData.insurance_id = BigInt(updateInsuranceClaimDto.insuranceId);
       }
-
-      return this.prisma.$transaction(async (prisma) => {
-        // Process claim updates
-        let claimData: any = { ...updateInsuranceClaimDto };
+      
+      if (updateInsuranceClaimDto.status && updateInsuranceClaimDto.status !== existingClaim.status) {
+        updateData.status = updateInsuranceClaimDto.status;
         
-        // Convert date strings to Date objects
-        if (updateInsuranceClaimDto.submissionDate) {
-          claimData.submissionDate = new Date(updateInsuranceClaimDto.submissionDate);
-        }
-        if (updateInsuranceClaimDto.responseDate) {
-          claimData.responseDate = new Date(updateInsuranceClaimDto.responseDate);
-        }
-        
-        // Convert string IDs to BigInt
-        if (updateInsuranceClaimDto.insuranceProviderId) {
-          claimData.insuranceProviderId = BigInt(updateInsuranceClaimDto.insuranceProviderId);
-        }
-        
-        // Remove properties that shouldn't be directly updated
-        delete claimData.invoiceItemsToAdd;
-        delete claimData.invoiceItemsToRemove;
-        
-        // Process item updates if provided and claim is in DRAFT status
-        if (claim.status === ClaimStatus.DRAFT) {
-          // Add new items to the claim
-          if (updateInsuranceClaimDto.invoiceItemsToAdd && updateInsuranceClaimDto.invoiceItemsToAdd.length > 0) {
-            const itemIdsToAdd = updateInsuranceClaimDto.invoiceItemsToAdd.map(id => BigInt(id));
+        // Handle status transitions
+        if (updateInsuranceClaimDto.status === ClaimStatus.PAID) {
+          // Calculate total approved amount
+          const approvedAmount = updateInsuranceClaimDto.amountApproved 
+            ? Number(updateInsuranceClaimDto.amountApproved) 
+            : Number(existingClaim.amount_claimed || '0');
+          
+          // Create payment record
+          if (approvedAmount > 0) {
+            await this.prisma.payments.create({
+              data: {
+                invoice_id: existingClaim.invoice_id,
+                amount: approvedAmount.toString(),
+                payment_method: PaymentMethod.INSURANCE_DIRECT,
+                payment_date: new Date(),
+                notes: `Insurance payment for claim ${existingClaim.claim_number || id}`,
+                created_at: new Date(),
+                updated_at: new Date(),
+              },
+            });
             
-            // Filter out items that are already in the claim
-            const existingItemIds = claim.items.map(item => item.invoiceItemId);
-            const newItemIds = itemIdsToAdd.filter(id => !existingItemIds.includes(id));
+            // Check if invoice is fully paid
+            const allPayments = await this.prisma.payments.findMany({
+              where: { invoice_id: existingClaim.invoice_id },
+            });
             
-            // Check if items belong to the invoice
-            const invoiceItemIds = claim.invoice.items.map(item => item.id);
-            const invalidItemIds = newItemIds.filter(id => !invoiceItemIds.includes(id));
+            const totalPaid = allPayments.reduce((sum: number, payment: any) => {
+              return sum + Number(payment.amount);
+            }, 0);
             
-            if (invalidItemIds.length > 0) {
-              throw new BadRequestException(`Some invoice items do not belong to this invoice: ${invalidItemIds.join(', ')}`);
-            }
+            // Update invoice status if fully paid
+            const invoice = await this.prisma.invoices.findFirst({
+              where: { id: existingClaim.invoice_id },
+            });
             
-            // Add new items
-            for (const itemId of newItemIds) {
-              const invoiceItem = claim.invoice.items.find(item => item.id === itemId);
-              await prisma.insuranceClaimItem.create({
+            if (invoice && totalPaid >= Number(invoice.total_amount)) {
+              await this.prisma.invoices.update({
+                where: { id: existingClaim.invoice_id },
                 data: {
-                  claimId: id,
-                  invoiceItemId: itemId,
-                  claimedAmount: Number(invoiceItem.amount),
+                  status: InvoiceStatus.PAID,
+                },
+              });
+            } else if (invoice) {
+              await this.prisma.invoices.update({
+                where: { id: existingClaim.invoice_id },
+                data: {
+                  status: InvoiceStatus.PARTIAL,
                 },
               });
             }
           }
-          
-          // Remove items from the claim
-          if (updateInsuranceClaimDto.invoiceItemsToRemove && updateInsuranceClaimDto.invoiceItemsToRemove.length > 0) {
-            const itemIdsToRemove = updateInsuranceClaimDto.invoiceItemsToRemove.map(id => BigInt(id));
-            
-            for (const itemId of itemIdsToRemove) {
-              // Find the claim item
-              const claimItem = claim.items.find(item => item.invoiceItemId === itemId);
-              
-              if (claimItem) {
-                await prisma.insuranceClaimItem.delete({
-                  where: { id: claimItem.id },
-                });
-              }
-            }
-          }
         }
         
-        // Recalculate claim amount based on updated items
-        const updatedItems = await prisma.insuranceClaimItem.findMany({
-          where: { claimId: id },
-          include: {
-            invoiceItem: true,
-          },
-        });
-        
-        const claimAmount = updatedItems.reduce(
-          (sum, item) => sum + Number(item.invoiceItem.amount),
-          0
-        );
-        
-        claimData.claimAmount = claimAmount;
-        
-        // Handle status updates and payment creation
-        const oldStatus = claim.status;
-        const newStatus = updateInsuranceClaimDto.status || oldStatus;
-        
-        // If status changed to PAID and auto-generate payment is enabled
-        if (
-          oldStatus !== ClaimStatus.PAID && 
-          newStatus === ClaimStatus.PAID && 
-          claim.autoGeneratePayment &&
-          updateInsuranceClaimDto.paidAmount
-        ) {
-          // Create a payment
-          await prisma.payment.create({
+        // Handle other status transitions
+        if (updateInsuranceClaimDto.status === ClaimStatus.DENIED && existingClaim.status !== ClaimStatus.DENIED) {
+          // Update invoice status if claim is denied
+          await this.prisma.invoices.update({
+            where: { id: existingClaim.invoice_id },
             data: {
-              invoiceId: claim.invoiceId,
-              amount: updateInsuranceClaimDto.paidAmount,
-              date: new Date(),
-              method: PaymentMethod.INSURANCE,
-              referenceNumber: claim.claimNumber,
-              notes: `Auto-generated payment from insurance claim ${id}`,
-              insuranceClaimId: String(id),
-              createdById: claim.createdById,
+              status: InvoiceStatus.PENDING,
             },
           });
-          
-          // Calculate new amount paid for invoice
-          const allPayments = await prisma.payment.findMany({
-            where: { invoiceId: claim.invoiceId },
-          });
-          
-          const amountPaid = allPayments.reduce(
-            (sum, payment) => sum + Number(payment.amount),
-            0
-          );
-          
-          // Update invoice status based on payment
-          let invoiceStatus: InvoiceStatus;
-          
-          if (amountPaid >= Number(claim.invoice.totalAmount)) {
-            invoiceStatus = InvoiceStatus.PAID;
-          } else if (amountPaid > 0) {
-            invoiceStatus = InvoiceStatus.PARTIALLY_PAID;
-          } else {
-            invoiceStatus = InvoiceStatus.SENT;
-          }
-          
-          await prisma.invoice.update({
-            where: { id: claim.invoiceId },
-            data: {
-              amountPaid,
-              status: invoiceStatus,
-            },
-          });
-        } 
-        // If status changed to DENIED
-        else if (
-          oldStatus !== ClaimStatus.DENIED && 
-          newStatus === ClaimStatus.DENIED
-        ) {
-          // Update invoice status to INSURANCE_DENIED
-          await prisma.invoice.update({
-            where: { id: claim.invoiceId },
-            data: {
-              status: InvoiceStatus.INSURANCE_DENIED,
-            },
-          });
+        } else if (updateInsuranceClaimDto.status === ClaimStatus.SUBMITTED && existingClaim.status !== ClaimStatus.SUBMITTED) {
+          // Update submission date if status changed to SUBMITTED
+          updateData.submission_date = new Date();
         }
-        // If status changed to a submitted status
-        else if (
-          oldStatus === ClaimStatus.DRAFT && 
-          newStatus !== ClaimStatus.DRAFT
-        ) {
-          // Update invoice status to PENDING_INSURANCE
-          await prisma.invoice.update({
-            where: { id: claim.invoiceId },
-            data: {
-              status: InvoiceStatus.PENDING_INSURANCE,
-            },
-          });
-        }
-        
-        // Update the claim
-        await prisma.insuranceClaim.update({
-          where: { id },
-          data: claimData,
-        });
-        
-        // Return the updated claim
-        return this.findOne(id);
+      }
+      
+      // Update the claim
+      await this.prisma.insurance_claims.update({
+        where: { id: claimId },
+        data: updateData,
       });
+      
+      // Return the updated claim
+      return this.findOne(id);
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
       }
-      this.logger.error(`Failed to update insurance claim with ID ${id}: ${error.message}`, error.stack);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to update insurance claim with ID ${id}: ${errorMessage}`, errorStack);
       throw error;
     }
   }
@@ -516,40 +374,42 @@ export class InsuranceClaimsService {
    * @throws NotFoundException if the claim doesn't exist
    * @throws BadRequestException if trying to delete a submitted claim
    */
-  async remove(id: bigint) {
+  async remove(id: string) {
     try {
+      const claimId = BigInt(id);
+      
       // Check if claim exists
-      const claim = await this.prisma.insuranceClaim.findUnique({
-        where: { id },
+      const existingClaim = await this.prisma.insurance_claims.findFirst({
+        where: { id: claimId },
       });
 
-      if (!claim) {
+      if (!existingClaim) {
         throw new NotFoundException(`Insurance claim with ID ${id} not found`);
       }
 
       // Only allow deleting DRAFT claims
-      if (claim.status !== ClaimStatus.DRAFT) {
+      if (existingClaim.status !== ClaimStatus.PENDING) {
         throw new BadRequestException(
-          `Cannot delete a claim with status ${claim.status}. Only DRAFT claims can be deleted.`
+          `Cannot delete a claim with status ${existingClaim.status}. Only PENDING claims can be deleted.`
         );
       }
 
       return this.prisma.$transaction(async (prisma) => {
-        // Delete all claim items
-        await prisma.insuranceClaimItem.deleteMany({
-          where: { claimId: id },
-        });
+        // Note: Since there's no dedicated insurance_claim_items model in the schema,
+        // we don't need to delete claim items.
         
         // Delete the claim
-        return prisma.insuranceClaim.delete({
-          where: { id },
+        return prisma.insurance_claims.delete({
+          where: { id: claimId },
         });
       });
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
       }
-      this.logger.error(`Failed to delete insurance claim with ID ${id}: ${error.message}`, error.stack);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to delete insurance claim with ID ${id}: ${errorMessage}`, errorStack);
       throw error;
     }
   }
@@ -561,20 +421,18 @@ export class InsuranceClaimsService {
    */
   async findByInvoiceId(invoiceId: bigint) {
     try {
-      return this.prisma.insuranceClaim.findMany({
-        where: { invoiceId },
+      return this.prisma.insurance_claims.findMany({
+        where: { invoice_id: invoiceId },
         include: {
-          insuranceProvider: true,
-          _count: {
-            select: {
-              items: true,
-            },
-          },
+          client_insurance: true,
+          invoices: true
         },
-        orderBy: { submissionDate: 'desc' },
+        orderBy: { submission_date: 'desc' },
       });
     } catch (error) {
-      this.logger.error(`Failed to fetch claims for invoice ${invoiceId}: ${error.message}`, error.stack);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to fetch claims for invoice ${invoiceId}: ${errorMessage}`, errorStack);
       throw error;
     }
   }
@@ -586,30 +444,27 @@ export class InsuranceClaimsService {
    */
   async findByClientId(clientId: bigint) {
     try {
-      return this.prisma.insuranceClaim.findMany({
+      return this.prisma.insurance_claims.findMany({
         where: {
-          invoice: {
-            clientId,
+          invoices: {
+            client_id: clientId,
           },
         },
         include: {
-          invoice: {
+          invoices: {
             select: {
               id: true,
-              invoiceNumber: true,
+              invoice_number: true,
             },
           },
-          insuranceProvider: true,
-          _count: {
-            select: {
-              items: true,
-            },
-          },
+          client_insurance: true
         },
-        orderBy: { submissionDate: 'desc' },
+        orderBy: { submission_date: 'desc' },
       });
     } catch (error) {
-      this.logger.error(`Failed to fetch claims for client ${clientId}: ${error.message}`, error.stack);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to fetch claims for client ${clientId}: ${errorMessage}`, errorStack);
       throw error;
     }
   }
@@ -620,7 +475,7 @@ export class InsuranceClaimsService {
    * @param status - New status
    * @returns The updated claim
    */
-  async updateStatus(id: bigint, status: ClaimStatus) {
-    return this.update(id, { status });
+  async updateStatus(id: string, status: ClaimStatus, userId: bigint) {
+    return this.update(id, { status }, userId);
   }
 }

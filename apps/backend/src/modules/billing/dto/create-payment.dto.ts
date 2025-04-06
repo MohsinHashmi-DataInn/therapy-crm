@@ -2,16 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsOptional, MaxLength, IsNumber, IsISO8601, IsEnum, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export enum PaymentMethod {
-  CREDIT_CARD = 'CREDIT_CARD',
-  DEBIT_CARD = 'DEBIT_CARD',
-  BANK_TRANSFER = 'BANK_TRANSFER',
-  CASH = 'CASH',
-  CHECK = 'CHECK',
-  INSURANCE = 'INSURANCE',
-  FUNDING_PROGRAM = 'FUNDING_PROGRAM',
-  OTHER = 'OTHER',
-}
+import { PaymentMethod } from '../../../types/prisma-models';
+
+// Re-export PaymentMethod for backward compatibility
+export { PaymentMethod };
 
 /**
  * DTO for creating a new payment
@@ -23,7 +17,7 @@ export class CreatePaymentDto {
   })
   @IsNotEmpty()
   @IsString()
-  invoiceId: string;
+  invoiceId: string = '';
 
   @ApiProperty({
     description: 'Amount of the payment in dollars',
@@ -33,7 +27,7 @@ export class CreatePaymentDto {
   @IsNumber()
   @Min(0.01)
   @Type(() => Number)
-  amount: number;
+  amount: number = 0;
 
   @ApiProperty({
     description: 'Date of the payment (ISO 8601 format)',
@@ -41,7 +35,7 @@ export class CreatePaymentDto {
   })
   @IsNotEmpty()
   @IsISO8601()
-  date: string;
+  date: string = '';
 
   @ApiProperty({
     description: 'Method of payment',
@@ -50,7 +44,7 @@ export class CreatePaymentDto {
   })
   @IsNotEmpty()
   @IsEnum(PaymentMethod)
-  method: PaymentMethod;
+  method: PaymentMethod = PaymentMethod.CREDIT_CARD;
 
   @ApiProperty({
     description: 'Reference number for the payment (e.g., transaction ID, check number)',

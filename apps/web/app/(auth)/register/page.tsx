@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +18,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Loader2, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useAuth } from "@/contexts/auth-provider";
+import { ROUTES } from "@/lib/constants";
+import { VerificationReminder } from "@/components/auth/verification-reminder";
 
 /**
  * Registration form schema with validation
@@ -40,8 +46,11 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 export default function RegisterPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { register } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [formStatus, setFormStatus] = useState<string>("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [registered, setRegistered] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -59,125 +68,77 @@ export default function RegisterPage() {
    */
   const onSubmit = async (data: RegisterFormValues) => {
     setIsLoading(true);
-    setFormStatus("Submitting form...");
+    setFormError(null);
     
     try {
-      console.log("Registration form submitted with:", data);
-      setFormStatus("Sending request to API...");
+      // Parse name into first and last name
+      const nameParts = data.name.trim().split(' ');
+      const firstName = nameParts[0];
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
       
-      // Using absolute URL for API endpoint with updated fetch configuration
-      const response = await fetch('http://localhost:5000/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          firstName: data.name.split(' ')[0],
-          lastName: data.name.split(' ').slice(1).join(' ') || data.name.split(' ')[0],
-          email: data.email,
-          password: data.password,
-          role: 'STAFF'
-        }),
-        // Updated CORS settings to match backend configuration
-        mode: 'cors',
-        credentials: 'include',
-        cache: 'no-cache',
+      // Use the auth context register function
+      const success = await register({
+        firstName,
+        lastName,
+        email: data.email,
+        password: data.password
       });
       
-      setFormStatus(`Response status: ${response.status}`);
-      
-      // Handle different response statuses
-      let responseData;
-      try {
-        responseData = await response.json();
-        console.log("Response data:", responseData);
-      } catch (parseError) {
-        console.error("Error parsing response:", parseError);
-        responseData = { message: 'Unable to parse server response' };
+      if (success) {
+        // Show the verification reminder rather than immediately redirecting
+        console.log("Registration successful");
+        setRegistered(true);
+        setRegisteredEmail(data.email);
+        toast({
+          title: "Registration Successful",
+          description: "Your account has been created. Please verify your email address.",
+        });
+      } else {
+        throw new Error("Registration failed. Please try again.");
       }
-      
-      if (!response.ok) {
-        if (response.status === 500) {
-          throw new Error('Server error: The backend service may be experiencing issues. Please try again later or contact support.');
-        } else if (response.status === 409) {
-          throw new Error('A user with this email already exists. Please try logging in instead.');
-        } else if (response.status === 0 || !response.status) {
-          throw new Error('Network error: Could not connect to the server. Please check your internet connection and try again.');
-        } else {
-          throw new Error(responseData.message || `Registration failed with status: ${response.status}`);
-        }
-      }
-      
-      setFormStatus("Registration successful!");
-      toast({
-        title: "Success",
-        description: "Your account has been created successfully",
-      });
-      
-      // Manually navigate to login after successful registration
-      setTimeout(() => {
-        window.location.href = "/login";
-      }, 1500);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Registration error:", error);
-      setFormStatus(`Error: ${error instanceof Error ? error.message : "Registration failed"}`);
+      
+      // Handle specific API errors
+      let errorMessage = "Registration failed. Please try again.";
+      
+      if (error.message.includes("already exists") || error.message.includes("already in use")) {
+        errorMessage = "This email is already registered. Please use a different email or try to log in.";
+      } else if (error.message.includes("validation")) {
+        errorMessage = "Please check your information and try again.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setFormError(errorMessage);
       
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Registration failed. Please try again.",
+        title: "Registration Failed",
+        description: errorMessage,
         variant: "destructive",
       });
-      
-      // Add fallback for server errors
-      if (error instanceof Error && error.message.includes('Failed to fetch')) {
-        toast({
-          title: "Connection Issue",
-          description: "Could not connect to the server. Please check if the backend is running at http://localhost:5000",
-          variant: "destructive",
-        });
-      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Check if backend is running
-  useEffect(() => {
-    const checkBackendConnection = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/api/health', { 
-          method: 'GET',
-          mode: 'cors',
-          credentials: 'include',
-          cache: 'no-cache',
-        });
-        
-        if (response.ok) {
-          console.log("Backend connection successful");
-          setFormStatus("Backend connection successful - ready to register");
-        } else {
-          console.error("Backend health check failed with status:", response.status);
-          setFormStatus("Backend health check failed - registration may not work");
-          toast({
-            title: "Backend Connection Issue",
-            description: "The backend service is running but returning errors. This may affect registration functionality.",
-            variant: "destructive",
-          });
-        }
-      } catch (error) {
-        console.error("Backend connection error:", error);
-        setFormStatus("Backend connection error - please check if server is running");
-        toast({
-          title: "Backend Connection Issue",
-          description: "Unable to connect to the backend service. Make sure it's running on port 5000.",
-          variant: "destructive",
-        });
-      }
-    };
-    
-    checkBackendConnection();
-  }, [toast]);
+
+
+  // Handle navigating to login or dashboard after registration completion
+  const handleVerificationClose = () => {
+    router.push(ROUTES.LOGIN);
+  };
+
+  // Show verification reminder if user has registered
+  if (registered) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md">
+          <VerificationReminder email={registeredEmail} onClose={handleVerificationClose} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-12">
@@ -190,10 +151,12 @@ export default function RegisterPage() {
         </CardHeader>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-4">
-            {formStatus && (
-              <div className="bg-muted p-2 rounded text-sm">
-                Status: {formStatus}
-              </div>
+            {formError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
             )}
             
             <div className="space-y-2">
@@ -258,17 +221,24 @@ export default function RegisterPage() {
           </CardContent>
           <CardFooter className="flex flex-col">
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Creating account..." : "Register"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating your account...
+                </>
+              ) : (
+                "Create account"
+              )}
             </Button>
-            <p className="mt-4 text-center text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <a
-                href="/login"
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                Login
-              </a>
-            </p>
+            <p className="text-center text-sm text-muted-foreground">
+            Already have an account?{" "}
+            <Link
+              href={ROUTES.LOGIN}
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              Sign in
+            </Link>
+          </p>
           </CardFooter>
         </form>
       </Card>

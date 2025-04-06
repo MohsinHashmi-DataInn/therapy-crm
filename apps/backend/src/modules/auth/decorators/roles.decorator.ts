@@ -1,5 +1,5 @@
 import { SetMetadata } from '@nestjs/common';
-import { UserRole } from '../guards/roles.guard';
+import { UserRole } from '../../../types/prisma-models';
 
 /**
  * Key for roles metadata

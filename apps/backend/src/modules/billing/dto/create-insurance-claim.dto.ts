@@ -1,17 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsOptional, MaxLength, IsISO8601, IsEnum, IsBoolean, IsArray } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, MaxLength, IsISO8601, IsEnum, IsBoolean, IsArray, IsNumber, IsDecimal } from 'class-validator';
 import { Type } from 'class-transformer';
-
-export enum ClaimStatus {
-  DRAFT = 'DRAFT',
-  SUBMITTED = 'SUBMITTED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  PARTIALLY_APPROVED = 'PARTIALLY_APPROVED',
-  APPROVED = 'APPROVED',
-  DENIED = 'DENIED',
-  APPEALED = 'APPEALED',
-  PAID = 'PAID',
-}
+import { ClaimStatus } from '../../../types/prisma-models';
 
 /**
  * DTO for creating a new insurance claim
@@ -23,15 +13,15 @@ export class CreateInsuranceClaimDto {
   })
   @IsNotEmpty()
   @IsString()
-  invoiceId: string;
+  invoiceId: string = '';
 
   @ApiProperty({
-    description: 'Insurance provider ID',
+    description: 'Insurance ID (client_insurance record)',
     example: '456789123',
   })
   @IsNotEmpty()
   @IsString()
-  insuranceProviderId: string;
+  insuranceId: string = '';
 
   @ApiProperty({
     description: 'Policy number',
@@ -40,7 +30,7 @@ export class CreateInsuranceClaimDto {
   @IsNotEmpty()
   @IsString()
   @MaxLength(100)
-  policyNumber: string;
+  policyNumber: string = '';
 
   @ApiProperty({
     description: 'Beneficiary name (usually the client or guardian)',
@@ -49,7 +39,7 @@ export class CreateInsuranceClaimDto {
   @IsNotEmpty()
   @IsString()
   @MaxLength(100)
-  beneficiaryName: string;
+  beneficiaryName: string = '';
 
   @ApiProperty({
     description: 'Date the claim was submitted (ISO 8601 format)',
@@ -63,8 +53,8 @@ export class CreateInsuranceClaimDto {
   @ApiProperty({
     description: 'Current status of the claim',
     enum: ClaimStatus,
-    example: ClaimStatus.DRAFT,
-    default: ClaimStatus.DRAFT,
+    example: ClaimStatus.PENDING,
+    default: ClaimStatus.PENDING,
   })
   @IsOptional()
   @IsEnum(ClaimStatus)
@@ -111,4 +101,41 @@ export class CreateInsuranceClaimDto {
   @IsBoolean()
   @Type(() => Boolean)
   autoGeneratePayment?: boolean;
+
+  @ApiProperty({
+    description: 'Amount being claimed',
+    example: '150.00',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  amountClaimed?: string;
+
+  @ApiProperty({
+    description: 'Amount approved by insurance',
+    example: '120.00',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  amountApproved?: string;
+
+  @ApiProperty({
+    description: 'Reason for denial if claim was denied',
+    example: 'Service not covered under policy',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  denialReason?: string;
+
+  @ApiProperty({
+    description: 'Date for follow-up on the claim (ISO 8601 format)',
+    example: '2023-11-15',
+    required: false,
+  })
+  @IsOptional()
+  @IsISO8601()
+  followUpDate?: string;
 }

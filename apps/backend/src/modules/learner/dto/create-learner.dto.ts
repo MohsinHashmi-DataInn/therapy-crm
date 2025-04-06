@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { LearnerStatus } from '@prisma/client';
+import { LearnerStatus } from '../../../types/prisma-models';
 
 // Using Prisma-generated LearnerStatus enum
 

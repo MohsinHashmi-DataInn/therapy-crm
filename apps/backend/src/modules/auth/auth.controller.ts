@@ -5,6 +5,9 @@ import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Request as ExpressRequest } from 'express';
 import { CreateUserDto } from '../user/dto/create-user.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 
 /**
  * Controller handling authentication endpoints
@@ -133,5 +136,59 @@ export class AuthController {
     }
     
     return this.authService.getProfile(userId);
+  }
+
+  /**
+   * Send email verification link to user
+   */
+  @Post('send-verification-email')
+  @ApiOperation({ summary: 'Send email verification link to user' })
+  @ApiResponse({ status: 200, description: 'Email verification sent successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request - email already verified or invalid input' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async sendEmailVerification(@Body() { email }: { email: string }) {
+    this.logger.log(`Email verification request received for: ${email}`);
+    const result = await this.authService.sendEmailVerification(email);
+    return { success: result, message: 'Verification email sent successfully' };
+  }
+
+  /**
+   * Verify user email using token
+   */
+  @Post('verify-email')
+  @ApiOperation({ summary: 'Verify user email using token' })
+  @ApiResponse({ status: 200, description: 'Email verified successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request - invalid or expired token' })
+  async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    this.logger.log('Email verification request received with token');
+    const result = await this.authService.verifyEmail(verifyEmailDto);
+    return { success: result, message: 'Email verified successfully' };
+  }
+
+  /**
+   * Send password reset link to user
+   */
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Send password reset link to user' })
+  @ApiResponse({ status: 200, description: 'Password reset email sent successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request - invalid input' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    this.logger.log(`Password reset request received for: ${forgotPasswordDto.email}`);
+    const result = await this.authService.forgotPassword(forgotPasswordDto);
+    return { success: result, message: 'Password reset instructions sent to your email' };
+  }
+
+  /**
+   * Reset user password using token
+   */
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Reset user password using token' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request - invalid or expired token, or password requirements not met' })
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    this.logger.log('Password reset request received with token');
+    const result = await this.authService.resetPassword(resetPasswordDto);
+    return { success: result, message: 'Password reset successfully' };
   }
 }

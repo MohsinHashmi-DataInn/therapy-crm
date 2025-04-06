@@ -1,14 +1,24 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateAssessmentDto } from './dto/create-assessment.dto';
 import { UpdateAssessmentDto } from './dto/update-assessment.dto';
+import { Assessment } from './interfaces/assessment.interface';
 
 /**
  * Service handling assessment-related business logic
+ * 
+ * Note: This is a temporary implementation since the assessment model
+ * is not yet available in the Prisma schema
  */
 @Injectable()
 export class AssessmentService {
-  constructor(private readonly prismaService: PrismaService) {}
+  private readonly logger = new Logger(AssessmentService.name);
+  private assessments: Map<string, Assessment> = new Map();
+  
+  constructor(private readonly prismaService: PrismaService) {
+    // Initialize with empty map
+    this.logger.warn('Using temporary in-memory implementation for Assessments');
+  }
 
   /**
    * Create a new assessment
@@ -18,7 +28,7 @@ export class AssessmentService {
    */
   async create(createAssessmentDto: CreateAssessmentDto, userId: bigint) {
     // Check if client exists
-    const client = await this.prismaService.client.findUnique({
+    const client = await this.prismaService.clients.findUnique({
       where: { id: BigInt(createAssessmentDto.clientId) },
     });
 
@@ -29,10 +39,10 @@ export class AssessmentService {
     // Check if learner exists if learnerId is provided
     let learnerId: bigint | undefined;
     if (createAssessmentDto.learnerId) {
-      const learner = await this.prismaService.learner.findUnique({
+      const learner = await this.prismaService.learners.findUnique({
         where: { 
           id: BigInt(createAssessmentDto.learnerId),
-          clientId: BigInt(createAssessmentDto.clientId),
+          client_id: BigInt(createAssessmentDto.clientId),
         },
       });
 
@@ -48,21 +58,25 @@ export class AssessmentService {
       ? JSON.parse(createAssessmentDto.scores) 
       : undefined;
 
-    // Create the assessment
-    const assessment = await this.prismaService.assessment.create({
-      data: {
-        assessmentType: createAssessmentDto.assessmentType,
-        assessmentDate: new Date(createAssessmentDto.assessmentDate),
-        evaluator: createAssessmentDto.evaluator,
-        scores,
-        summary: createAssessmentDto.summary,
-        recommendations: createAssessmentDto.recommendations,
-        notes: createAssessmentDto.notes,
-        clientId: BigInt(createAssessmentDto.clientId),
-        learnerId,
-        createdBy: userId,
-      },
-    });
+    // Create the assessment (temporary in-memory implementation)
+    const id = BigInt(Date.now());
+    const assessment: Assessment = {
+      id,
+      assessmentType: createAssessmentDto.assessmentType,
+      assessmentDate: new Date(createAssessmentDto.assessmentDate),
+      evaluator: createAssessmentDto.evaluator,
+      scores,
+      summary: createAssessmentDto.summary,
+      recommendations: createAssessmentDto.recommendations,
+      notes: createAssessmentDto.notes,
+      clientId: BigInt(createAssessmentDto.clientId),
+      learnerId,
+      createdAt: new Date(),
+      createdBy: userId,
+    };
+    
+    this.assessments.set(id.toString(), assessment);
+    this.logger.log(`Created temporary assessment with ID: ${id}`);
 
     return assessment;
   }
@@ -75,50 +89,14 @@ export class AssessmentService {
    * @returns Array of assessments
    */
   async findAll(clientId?: string, learnerId?: string, assessmentType?: string) {
-    const where: any = {};
-
-    // Add filters if provided
-    if (clientId) {
-      where.clientId = BigInt(clientId);
-    }
-
-    if (learnerId) {
-      where.learnerId = BigInt(learnerId);
-    }
-
-    if (assessmentType) {
-      where.assessmentType = assessmentType;
-    }
-
-    const assessments = await this.prismaService.assessment.findMany({
-      where,
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        learner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        createdByUser: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-      orderBy: {
-        assessmentDate: 'desc',
-      },
-    });
+    // Get all assessments (temporary in-memory implementation)
+    const assessments = Array.from(this.assessments.values())
+      .filter(a => a.clientId.toString() === clientId && 
+        (!learnerId || a.learnerId?.toString() === learnerId) &&
+        (!assessmentType || a.assessmentType === assessmentType))
+      .sort((a, b) => b.assessmentDate.getTime() - a.assessmentDate.getTime());
+    
+    this.logger.log(`Retrieved ${assessments.length} temporary assessments`);
 
     return assessments;
   }
@@ -129,43 +107,14 @@ export class AssessmentService {
    * @returns The found assessment
    */
   async findOne(id: bigint) {
-    const assessment = await this.prismaService.assessment.findUnique({
-      where: { id },
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        learner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        createdByUser: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        updatedByUser: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    });
+    // Get assessment by ID (temporary in-memory implementation)
+    const assessment = this.assessments.get(id.toString());
 
     if (!assessment) {
       throw new NotFoundException(`Assessment with ID ${id} not found`);
     }
+    
+    this.logger.log(`Retrieved temporary assessment with ID: ${id}`);
 
     return assessment;
   }
@@ -182,48 +131,33 @@ export class AssessmentService {
     updateAssessmentDto: UpdateAssessmentDto,
     userId: bigint,
   ) {
-    // Check if assessment exists
-    await this.findOne(id);
-
-    // Prepare learner ID if provided
-    let learnerId: bigint | undefined;
-    if (updateAssessmentDto.learnerId) {
-      learnerId = BigInt(updateAssessmentDto.learnerId);
+    // Update assessment (temporary in-memory implementation)
+    const existingAssessment = this.assessments.get(id.toString());
+    if (!existingAssessment) {
+      throw new NotFoundException(`Assessment with ID ${id} not found`);
     }
-
-    // Prepare client ID if provided
-    let clientId: bigint | undefined;
-    if (updateAssessmentDto.clientId) {
-      clientId = BigInt(updateAssessmentDto.clientId);
-    }
-
-    // Parse JSON scores if provided
+    
     const scores = updateAssessmentDto.scores 
       ? JSON.parse(updateAssessmentDto.scores) 
       : undefined;
 
-    // Prepare assessment date if provided
-    let assessmentDate: Date | undefined;
-    if (updateAssessmentDto.assessmentDate) {
-      assessmentDate = new Date(updateAssessmentDto.assessmentDate);
-    }
-
-    // Update the assessment
-    const updatedAssessment = await this.prismaService.assessment.update({
-      where: { id },
-      data: {
-        assessmentType: updateAssessmentDto.assessmentType,
-        assessmentDate,
-        evaluator: updateAssessmentDto.evaluator,
-        scores,
-        summary: updateAssessmentDto.summary,
-        recommendations: updateAssessmentDto.recommendations,
-        notes: updateAssessmentDto.notes,
-        clientId,
-        learnerId,
-        updatedBy: userId,
-      },
-    });
+    const updatedAssessment: Assessment = {
+      ...existingAssessment,
+      assessmentType: updateAssessmentDto.assessmentType || existingAssessment.assessmentType,
+      assessmentDate: updateAssessmentDto.assessmentDate
+        ? new Date(updateAssessmentDto.assessmentDate)
+        : existingAssessment.assessmentDate,
+      evaluator: updateAssessmentDto.evaluator || existingAssessment.evaluator,
+      scores: scores || existingAssessment.scores,
+      summary: updateAssessmentDto.summary ?? existingAssessment.summary,
+      recommendations: updateAssessmentDto.recommendations ?? existingAssessment.recommendations,
+      notes: updateAssessmentDto.notes ?? existingAssessment.notes,
+      updatedBy: userId,
+      updatedAt: new Date(),
+    };
+    
+    this.assessments.set(id.toString(), updatedAssessment);
+    this.logger.log(`Updated temporary assessment with ID: ${id}`);
 
     return updatedAssessment;
   }
@@ -234,12 +168,14 @@ export class AssessmentService {
    * @returns The removed assessment
    */
   async remove(id: bigint) {
-    // Check if assessment exists
-    await this.findOne(id);
-
-    // Remove the assessment
-    return this.prismaService.assessment.delete({
-      where: { id },
-    });
+    // Delete assessment (temporary in-memory implementation)
+    const deleted = this.assessments.delete(id.toString());
+    
+    if (!deleted) {
+      throw new NotFoundException(`Assessment with ID ${id} not found`);
+    }
+    
+    this.logger.log(`Deleted temporary assessment with ID: ${id}`);
+    return { id: BigInt(id), deleted: true };
   }
 }

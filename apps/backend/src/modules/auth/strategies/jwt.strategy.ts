@@ -54,7 +54,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       this.logger.log(`Looking up user with ID: ${userId.toString()}`);
       
       // Find the user in the database
-      const user = await this.prisma.user.findUnique({
+      const user = await this.prisma.users.findUnique({
         where: { id: userId },
       });
       
@@ -63,7 +63,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         throw new UnauthorizedException('User not found');
       }
       
-      if (!user.isActive) {
+      if (!user.is_active) {
         this.logger.warn(`User account is inactive: ${userId.toString()}`);
         throw new UnauthorizedException('User account is inactive');
       }
@@ -75,8 +75,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         id: user.id,         // BigInt ID
         email: user.email,
         role: user.role,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        firstName: user.first_name,
+        lastName: user.last_name,
       };
     } catch (error) {
       this.logger.error(

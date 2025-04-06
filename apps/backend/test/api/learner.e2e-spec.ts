@@ -7,7 +7,7 @@ import * as pactum from 'pactum';
 import { initApp } from '../setup';
 import { PrismaService } from '../../src/common/prisma/prisma.service';
 import { CreateLearnerDto } from '../../src/modules/learner/dto/create-learner.dto';
-import { LearnerStatus } from '@prisma/client';
+import { LearnerStatus } from '../../src/types/prisma-models';
 import { UpdateLearnerDto } from '../../src/modules/learner/dto/update-learner.dto';
 import { UserRole } from '../../src/modules/auth/guards/roles.guard';
 

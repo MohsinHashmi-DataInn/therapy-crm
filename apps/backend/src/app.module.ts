@@ -13,6 +13,8 @@ import { PracticeModule } from './modules/practice.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { DocumentStorageModule } from './modules/document-storage/document-storage.module';
+import { TelehealthModule } from './modules/telehealth/telehealth.module';
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     AnalyticsModule,
     BillingModule,
     NotificationsModule,
+    DocumentStorageModule,
+    TelehealthModule,
   ],
 })
 export class AppModule {}

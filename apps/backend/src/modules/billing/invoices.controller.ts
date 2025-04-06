@@ -18,7 +18,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../auth/guards/roles.guard';
 import { InvoicesService } from './invoices.service';
-import { CreateInvoiceDto, InvoiceStatus } from './dto/create-invoice.dto';
+import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { InvoiceStatus } from '../../types/prisma-models';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 
 /**
@@ -77,16 +78,16 @@ export class InvoicesController {
     description: 'Filter by invoice status',
   })
   @ApiQuery({
-    name: 'from',
+    name: 'startDate',
     required: false,
     type: String,
-    description: 'Filter by issue date (from) in ISO format',
+    description: 'Start date for filtering (YYYY-MM-DD)',
   })
   @ApiQuery({
-    name: 'to',
+    name: 'endDate',
     required: false,
     type: String,
-    description: 'Filter by issue date (to) in ISO format',
+    description: 'End date for filtering (YYYY-MM-DD)',
   })
   @ApiQuery({
     name: 'minAmount',
@@ -124,6 +125,12 @@ export class InvoicesController {
     type: Number,
     description: 'Pagination offset (default: 0)',
   })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    type: String,
+    description: 'Field to sort by (e.g., issueDate, dueDate, totalAmount)',
+  })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Returns all invoices matching the criteria',
@@ -135,26 +142,28 @@ export class InvoicesController {
   async findAll(
     @Query('clientId') clientId?: string,
     @Query('status') status?: InvoiceStatus,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
     @Query('minAmount') minAmount?: number,
     @Query('maxAmount') maxAmount?: number,
     @Query('insuranceProviderId') insuranceProviderId?: string,
     @Query('fundingProgramId') fundingProgramId?: string,
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
+    @Query('sortBy') sortBy?: string,
   ) {
     return this.invoicesService.findAll({
       clientId,
       status,
-      from,
-      to,
+      startDate,
+      endDate,
       minAmount,
       maxAmount,
       insuranceProviderId,
       fundingProgramId,
       limit,
       offset,
+      sortBy,
     });
   }
 

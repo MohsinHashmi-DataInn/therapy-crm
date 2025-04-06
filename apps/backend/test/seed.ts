@@ -16,7 +16,7 @@ export const seedTestDatabase = async () => {
 
     // Clean up existing test users to ensure a fresh start
     console.log('Cleaning up existing test users...');
-    await prisma.user.deleteMany({
+    await prisma.users.deleteMany({
       where: {
         email: {
           in: [TEST_USERS.admin.email, TEST_USERS.staff.email]
@@ -37,24 +37,27 @@ export const seedTestDatabase = async () => {
     console.log('Staff password hash:', staffPasswordHash);
 
     // Use upsert to avoid unique constraint errors
-    const adminUser = await prisma.user.upsert({
+    const adminUser = await prisma.users.upsert({
       where: {
         email: TEST_USERS.admin.email
       },
       update: {
-        firstName: 'Admin',
-        lastName: 'User',
+        first_name: 'Admin',
+        last_name: 'User',
         password: adminPasswordHash,
         role: TEST_USERS.admin.role as UserRole,
-        isActive: true,
+        is_active: true,
+        updated_at: new Date(),
       },
       create: {
         email: TEST_USERS.admin.email,
-        firstName: 'Admin',
-        lastName: 'User',
+        first_name: 'Admin',
+        last_name: 'User',
         password: adminPasswordHash,
         role: TEST_USERS.admin.role as UserRole,
-        isActive: true,
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date(),
       },
     });
 
@@ -62,24 +65,27 @@ export const seedTestDatabase = async () => {
     console.log('Admin password hash in database:', adminUser.password);
 
     // Use upsert to avoid unique constraint errors
-    const staffUser = await prisma.user.upsert({
+    const staffUser = await prisma.users.upsert({
       where: {
         email: TEST_USERS.staff.email
       },
       update: {
-        firstName: 'Staff',
-        lastName: 'User',
+        first_name: 'Staff',
+        last_name: 'User',
         password: staffPasswordHash,
         role: TEST_USERS.staff.role as UserRole,
-        isActive: true,
+        is_active: true,
+        updated_at: new Date(),
       },
       create: {
         email: TEST_USERS.staff.email,
-        firstName: 'Staff',
-        lastName: 'User',
+        first_name: 'Staff',
+        last_name: 'User',
         password: staffPasswordHash,
         role: TEST_USERS.staff.role as UserRole,
-        isActive: true,
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date(),
       },
     });
 

@@ -8,16 +8,16 @@ async function main() {
     // Create admin user
     const adminPassword = await bcrypt.hash('Admin123!', 10);
     
-    const admin = await prisma.user.create({
+    const admin = await prisma.users.create({
       data: {
         email: 'admin@example.com',
         password: adminPassword,
-        firstName: 'Admin',
-        lastName: 'User',
+        first_name: 'Admin',
+        last_name: 'User',
         role: 'ADMIN',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date(),
       },
     });
     
@@ -26,16 +26,16 @@ async function main() {
     // Create staff user
     const staffPassword = await bcrypt.hash('Staff123!', 10);
     
-    const staff = await prisma.user.create({
+    const staff = await prisma.users.create({
       data: {
         email: 'staff@example.com',
         password: staffPassword,
-        firstName: 'Staff',
-        lastName: 'User',
+        first_name: 'Staff',
+        last_name: 'User',
         role: 'STAFF',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date(),
       },
     });
     

@@ -2,16 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsOptional, MaxLength, MinLength, IsNumber, IsBoolean, IsISO8601, IsEnum, IsArray, ValidateNested, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export enum InvoiceStatus {
-  DRAFT = 'DRAFT',
-  SENT = 'SENT',
-  PARTIALLY_PAID = 'PARTIALLY_PAID',
-  PAID = 'PAID',
-  OVERDUE = 'OVERDUE',
-  CANCELLED = 'CANCELLED',
-  PENDING_INSURANCE = 'PENDING_INSURANCE',
-  INSURANCE_DENIED = 'INSURANCE_DENIED',
-}
+import { InvoiceStatus } from '../../../types/prisma-models';
+
+// Re-export InvoiceStatus for backward compatibility
+export { InvoiceStatus };
 
 export class CreateInvoiceItemDto {
   @ApiProperty({
@@ -20,7 +14,7 @@ export class CreateInvoiceItemDto {
   })
   @IsNotEmpty()
   @IsString()
-  serviceCodeId: string;
+  serviceCodeId: string = '';
 
   @ApiProperty({
     description: 'Description of the service provided',
@@ -29,7 +23,7 @@ export class CreateInvoiceItemDto {
   @IsNotEmpty()
   @IsString()
   @MaxLength(255)
-  description: string;
+  description: string = '';
 
   @ApiProperty({
     description: 'Quantity of units',
@@ -39,7 +33,7 @@ export class CreateInvoiceItemDto {
   @IsNumber()
   @Min(0.1)
   @Type(() => Number)
-  quantity: number;
+  quantity: number = 0;
 
   @ApiProperty({
     description: 'Unit rate in dollars',
@@ -49,7 +43,7 @@ export class CreateInvoiceItemDto {
   @IsNumber()
   @Min(0)
   @Type(() => Number)
-  rate: number;
+  rate: number = 0;
 
   @ApiProperty({
     description: 'Date of service (ISO 8601 format)',
@@ -57,7 +51,7 @@ export class CreateInvoiceItemDto {
   })
   @IsNotEmpty()
   @IsISO8601()
-  dateOfService: string;
+  dateOfService: string = '';
 
   @ApiProperty({
     description: 'ID of the appointment related to this service (if applicable)',
@@ -100,7 +94,7 @@ export class CreateInvoiceDto {
   })
   @IsNotEmpty()
   @IsString()
-  clientId: string;
+  clientId: string = '';
 
   @ApiProperty({
     description: 'Invoice number (if not auto-generated)',
@@ -127,7 +121,7 @@ export class CreateInvoiceDto {
   })
   @IsNotEmpty()
   @IsISO8601()
-  dueDate: string;
+  dueDate: string = '';
 
   @ApiProperty({
     description: 'Current status of the invoice',
@@ -165,7 +159,7 @@ export class CreateInvoiceDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateInvoiceItemDto)
-  items: CreateInvoiceItemDto[];
+  items: CreateInvoiceItemDto[] = [];
 
   @ApiProperty({
     description: 'Insurance policy number, if applicable',

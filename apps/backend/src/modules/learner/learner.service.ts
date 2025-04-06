@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateLearnerDto } from './dto/create-learner.dto';
 import { UpdateLearnerDto } from './dto/update-learner.dto';
-import { LearnerStatus } from '@prisma/client';
+import { LearnerStatus } from '../../types/prisma-models';
 
 // Define local Learner interface to match the Prisma schema
 export interface Learner {
@@ -36,7 +36,7 @@ export class LearnerService {
    */
   async create(createLearnerDto: CreateLearnerDto, userId: bigint): Promise<Learner> {
     // Verify client exists
-    const client = await this.prismaService.client.findUnique({
+    const client = await this.prismaService.clients.findUnique({
       where: { id: BigInt(createLearnerDto.clientId) },
     });
 
@@ -49,7 +49,7 @@ export class LearnerService {
     if (createLearnerDto.instructorId) {
       instructorId = BigInt(createLearnerDto.instructorId);
       // Verify instructor exists
-      const instructor = await this.prismaService.user.findUnique({
+      const instructor = await this.prismaService.users.findUnique({
         where: { id: instructorId },
       });
 
@@ -68,29 +68,29 @@ export class LearnerService {
     }
 
     // Create learner
-    const learner = await this.prismaService.learner.create({
+    const learner = await this.prismaService.learners.create({
       data: {
-        firstName: createLearnerDto.firstName,
-        lastName: createLearnerDto.lastName,
+        first_name: createLearnerDto.firstName,
+        last_name: createLearnerDto.lastName,
         dateOfBirth: dateOfBirth,
         gender: createLearnerDto.gender,
         course: createLearnerDto.course,
         schedule: createLearnerDto.schedule,
-        status: createLearnerDto.status || LearnerStatus.ACTIVE,
+        status: createLearnerDto.status || 'ACTIVE',
         notes: createLearnerDto.notes,
         client: {
           connect: { id: BigInt(createLearnerDto.clientId) },
         },
-        instructor: instructorId ? {
+        users_learners_instructor_idTousers: instructorId ? {
           connect: { id: instructorId },
         } : undefined,
-        createdByUser: userId ? {
+        users_learners_created_byTousers: userId ? {
           connect: { id: userId },
         } : undefined,
       },
       include: {
-        client: true,
-        instructor: true,
+        clients: true,
+        users_learners_instructor_idTousers: true,
       },
     }) as unknown as Learner;
 
@@ -229,7 +229,7 @@ export class LearnerService {
       
       if (instructorId) {
         // Verify instructor exists
-        const instructor = await this.prismaService.user.findUnique({
+        const instructor = await this.prismaService.users.findUnique({
           where: { id: instructorId },
         });
 

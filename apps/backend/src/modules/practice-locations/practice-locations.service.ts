@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreatePracticeLocationDto } from './dto/create-practice-location.dto';
 import { UpdatePracticeLocationDto } from './dto/update-practice-location.dto';
 

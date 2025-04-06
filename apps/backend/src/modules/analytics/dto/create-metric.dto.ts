@@ -19,7 +19,7 @@ export class CreateMetricDto {
     example: 'therapy_hours_delivered',
   })
   @IsString()
-  metric_name: string;
+  metric_name: string = '';
 
   @ApiProperty({
     description: 'Category of the metric',
@@ -27,7 +27,7 @@ export class CreateMetricDto {
     example: MetricCategory.CLINICAL,
   })
   @IsEnum(MetricCategory)
-  metric_category: MetricCategory;
+  metric_category: MetricCategory = MetricCategory.CLINICAL;
 
   @ApiProperty({
     description: 'Human-readable description of the metric',

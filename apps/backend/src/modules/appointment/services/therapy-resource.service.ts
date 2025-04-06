@@ -17,16 +17,15 @@ export class TherapyResourceService {
    * @returns The created therapy room
    */
   async createRoom(createRoomDto: CreateTherapyRoomDto, userId: bigint) {
-    return this.prismaService.therapyRoom.create({
+    return this.prismaService.therapy_rooms.create({
       data: {
         name: createRoomDto.name,
         capacity: createRoomDto.capacity,
         description: createRoomDto.description,
         equipment: createRoomDto.equipment,
-        isActive: createRoomDto.isActive ?? true,
-        createdByUser: {
-          connect: { id: userId }
-        }
+        is_active: createRoomDto.isActive ?? true,
+        created_by: userId,
+        updated_at: new Date()
       }
     });
   }
@@ -37,16 +36,23 @@ export class TherapyResourceService {
    * @returns List of therapy rooms
    */
   async findAllRooms(isActive?: boolean) {
-    const where = isActive !== undefined ? { isActive } : {};
+    const where = isActive !== undefined ? { is_active: isActive } : {};
     
-    return this.prismaService.therapyRoom.findMany({
+    return this.prismaService.therapy_rooms.findMany({
       where,
       include: {
+        users_therapy_rooms_created_byTousers: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true
+          }
+        },
         appointments: {
           select: {
             id: true,
-            startTime: true,
-            endTime: true
+            start_time: true,
+            end_time: true
           }
         }
       }
@@ -59,14 +65,14 @@ export class TherapyResourceService {
    * @returns The therapy room
    */
   async findRoomById(id: bigint) {
-    const room = await this.prismaService.therapyRoom.findUnique({
+    const room = await this.prismaService.therapy_rooms.findUnique({
       where: { id },
       include: {
         appointments: {
           select: {
             id: true,
-            startTime: true,
-            endTime: true,
+            start_time: true,
+            end_time: true,
             title: true
           }
         }
@@ -89,7 +95,7 @@ export class TherapyResourceService {
   async updateRoom(id: bigint, updateData: Partial<CreateTherapyRoomDto>) {
     await this.findRoomById(id);
 
-    return this.prismaService.therapyRoom.update({
+    return this.prismaService.therapy_rooms.update({
       where: { id },
       data: updateData
     });
@@ -104,10 +110,10 @@ export class TherapyResourceService {
     await this.findRoomById(id);
 
     // Check if room has any future appointments
-    const hasAppointments = await this.prismaService.appointment.findFirst({
+    const hasAppointments = await this.prismaService.appointments.findFirst({
       where: {
-        roomId: id,
-        startTime: {
+        room_id: id,
+        start_time: {
           gte: new Date()
         }
       }
@@ -117,7 +123,7 @@ export class TherapyResourceService {
       throw new BadRequestException('Cannot delete a room with future appointments');
     }
 
-    return this.prismaService.therapyRoom.delete({
+    return this.prismaService.therapy_rooms.delete({
       where: { id }
     });
   }
@@ -140,31 +146,31 @@ export class TherapyResourceService {
     await this.findRoomById(roomId);
 
     // Check for overlapping appointments
-    const conflictingAppointment = await this.prismaService.appointment.findFirst({
+    const conflictingAppointment = await this.prismaService.appointments.findFirst({
       where: {
-        roomId,
+        room_id: roomId,
         id: excludeAppointmentId ? { not: excludeAppointmentId } : undefined,
         OR: [
           // starts during the time slot
           {
-            startTime: {
+            start_time: {
               gte: startTime,
               lt: endTime
             }
           },
           // ends during the time slot
           {
-            endTime: {
+            end_time: {
               gt: startTime,
               lte: endTime
             }
           },
           // spans the entire time slot
           {
-            startTime: {
+            start_time: {
               lte: startTime
             },
-            endTime: {
+            end_time: {
               gte: endTime
             }
           }
@@ -182,16 +188,15 @@ export class TherapyResourceService {
    * @returns The created equipment
    */
   async createEquipment(createEquipmentDto: CreateTherapyEquipmentDto, userId: bigint) {
-    return this.prismaService.therapyEquipment.create({
+    return this.prismaService.therapy_equipment.create({
       data: {
         name: createEquipmentDto.name,
         description: createEquipmentDto.description,
         quantity: createEquipmentDto.quantity ?? 1,
-        isAvailable: createEquipmentDto.isAvailable ?? true,
+        is_available: createEquipmentDto.isAvailable ?? true,
         notes: createEquipmentDto.notes,
-        createdByUser: {
-          connect: { id: userId }
-        }
+        created_by: userId,
+        updated_at: new Date()
       }
     });
   }
@@ -202,19 +207,19 @@ export class TherapyResourceService {
    * @returns List of therapy equipment
    */
   async findAllEquipment(isAvailable?: boolean) {
-    const where = isAvailable !== undefined ? { isAvailable } : {};
+    const where = isAvailable !== undefined ? { is_available: isAvailable } : {};
     
-    return this.prismaService.therapyEquipment.findMany({
+    return this.prismaService.therapy_equipment.findMany({
       where,
       include: {
-        appointmentEquipment: {
+        appointment_equipment: {
           select: {
-            id: true,
-            appointment: {
+            appointment_id: true,
+            appointments: {
               select: {
                 id: true,
-                startTime: true,
-                endTime: true
+                start_time: true,
+                end_time: true
               }
             }
           }
@@ -229,17 +234,17 @@ export class TherapyResourceService {
    * @returns The therapy equipment
    */
   async findEquipmentById(id: bigint) {
-    const equipment = await this.prismaService.therapyEquipment.findUnique({
+    const equipment = await this.prismaService.therapy_equipment.findUnique({
       where: { id },
       include: {
-        appointmentEquipment: {
+        appointment_equipment: {
           select: {
-            id: true,
-            appointment: {
+            appointment_id: true,
+            appointments: {
               select: {
                 id: true,
-                startTime: true,
-                endTime: true,
+                start_time: true,
+                end_time: true,
                 title: true
               }
             }
@@ -264,7 +269,7 @@ export class TherapyResourceService {
   async updateEquipment(id: bigint, updateData: Partial<CreateTherapyEquipmentDto>) {
     await this.findEquipmentById(id);
 
-    return this.prismaService.therapyEquipment.update({
+    return this.prismaService.therapy_equipment.update({
       where: { id },
       data: updateData
     });
@@ -279,22 +284,22 @@ export class TherapyResourceService {
     await this.findEquipmentById(id);
 
     // Check if equipment is used in any future appointments
-    const hasAppointments = await this.prismaService.appointmentEquipment.findFirst({
+    const hasAppointmentUsage = await this.prismaService.appointment_equipment.findFirst({
       where: {
-        equipmentId: id,
-        appointment: {
-          startTime: {
+        equipment_id: id,
+        appointments: {
+          start_time: {
             gte: new Date()
           }
         }
       }
     });
 
-    if (hasAppointments) {
+    if (hasAppointmentUsage) {
       throw new BadRequestException('Cannot delete equipment used in future appointments');
     }
 
-    return this.prismaService.therapyEquipment.delete({
+    return this.prismaService.therapy_equipment.delete({
       where: { id }
     });
   }
@@ -318,40 +323,40 @@ export class TherapyResourceService {
     // Get equipment
     const equipment = await this.findEquipmentById(equipmentId);
     
-    if (!equipment.isAvailable || equipment.quantity < quantity) {
+    if (!equipment.is_available || equipment.quantity < quantity) {
       return false;
     }
 
     // Get total quantity used in overlapping appointments
-    const usedQuantity = await this.prismaService.appointmentEquipment.aggregate({
+    const usedQuantity = await this.prismaService.appointment_equipment.aggregate({
       _sum: {
         quantity: true
       },
       where: {
-        equipmentId,
-        appointment: {
+        equipment_id: equipmentId,
+        appointments: {
           id: excludeAppointmentId ? { not: excludeAppointmentId } : undefined,
           OR: [
             // starts during the time slot
             {
-              startTime: {
+              start_time: {
                 gte: startTime,
                 lt: endTime
               }
             },
             // ends during the time slot
             {
-              endTime: {
+              end_time: {
                 gt: startTime,
                 lte: endTime
               }
             },
             // spans the entire time slot
             {
-              startTime: {
+              start_time: {
                 lte: startTime
               },
-              endTime: {
+              end_time: {
                 gte: endTime
               }
             }
@@ -360,7 +365,8 @@ export class TherapyResourceService {
       }
     });
 
-    const totalUsed = usedQuantity._sum.quantity || 0;
-    return equipment.quantity - totalUsed >= quantity;
-  }
+    // Check if available quantity is sufficient
+    const availableQuantity = equipment.quantity - ((usedQuantity?._sum?.quantity) || 0);
+    return availableQuantity >= quantity;
+}
 }

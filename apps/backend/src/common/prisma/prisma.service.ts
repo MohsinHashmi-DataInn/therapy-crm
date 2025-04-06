@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { TypedPrismaClient, createTypedPrismaClient } from './prisma.types';
 
 /**
  * Real PrismaService implementation that provides a wrapper around the PrismaClient

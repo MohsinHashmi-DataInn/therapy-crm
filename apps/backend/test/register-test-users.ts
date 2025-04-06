@@ -18,7 +18,7 @@ export const registerTestUsers = async (baseUrl: string): Promise<void> => {
     console.log('Registering test users through API...');
 
     // First, clean up existing test users to avoid conflicts
-    await prisma.user.deleteMany({
+    await prisma.users.deleteMany({
       where: {
         email: {
           in: [TEST_USERS.admin.email, TEST_USERS.staff.email],

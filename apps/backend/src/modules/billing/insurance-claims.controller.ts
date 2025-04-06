@@ -17,7 +17,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../auth/guards/roles.guard';
 import { InsuranceClaimsService } from './insurance-claims.service';
-import { CreateInsuranceClaimDto, ClaimStatus } from './dto/create-insurance-claim.dto';
+import { CreateInsuranceClaimDto } from './dto/create-insurance-claim.dto';
+import { ClaimStatus } from '../../types/prisma-models';
 import { UpdateInsuranceClaimDto } from './dto/update-insurance-claim.dto';
 
 /**
@@ -58,7 +59,7 @@ export class InsuranceClaimsController {
     description: 'Forbidden - Requires admin or staff role',
   })
   async create(@Body() createInsuranceClaimDto: CreateInsuranceClaimDto, @Request() req: any) {
-    return this.insuranceClaimsService.create(createInsuranceClaimDto, BigInt(req.user.id));
+    return this.insuranceClaimsService.create(createInsuranceClaimDto, req.user.id);
   }
 
   /**
@@ -74,10 +75,10 @@ export class InsuranceClaimsController {
     description: 'Filter by claim status',
   })
   @ApiQuery({
-    name: 'insuranceProviderId',
+    name: 'insuranceId',
     required: false,
     type: String,
-    description: 'Filter by insurance provider ID',
+    description: 'Filter by insurance ID',
   })
   @ApiQuery({
     name: 'from',
@@ -104,10 +105,10 @@ export class InsuranceClaimsController {
     description: 'Pagination limit (default: 50)',
   })
   @ApiQuery({
-    name: 'offset',
+    name: 'page',
     required: false,
     type: Number,
-    description: 'Pagination offset (default: 0)',
+    description: 'Pagination page (default: 1)',
   })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -123,21 +124,21 @@ export class InsuranceClaimsController {
   })
   async findAll(
     @Query('status') status?: ClaimStatus,
-    @Query('insuranceProviderId') insuranceProviderId?: string,
+    @Query('insuranceId') insuranceId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('clientId') clientId?: string,
     @Query('limit') limit?: number,
-    @Query('offset') offset?: number,
+    @Query('page') page?: number,
   ) {
     return this.insuranceClaimsService.findAll({
       status,
-      insuranceProviderId,
+      insuranceId,
       from,
       to,
       clientId,
       limit,
-      offset,
+      page,
     });
   }
 
@@ -165,7 +166,7 @@ export class InsuranceClaimsController {
     description: 'Forbidden - Requires admin or staff role',
   })
   async findOne(@Param('id') id: string) {
-    return this.insuranceClaimsService.findOne(BigInt(id));
+    return this.insuranceClaimsService.findOne(id);
   }
 
   /**
@@ -233,8 +234,8 @@ export class InsuranceClaimsController {
     status: HttpStatus.FORBIDDEN,
     description: 'Forbidden - Requires admin or staff role',
   })
-  async update(@Param('id') id: string, @Body() updateInsuranceClaimDto: UpdateInsuranceClaimDto) {
-    return this.insuranceClaimsService.update(BigInt(id), updateInsuranceClaimDto);
+  async update(@Param('id') id: string, @Body() updateInsuranceClaimDto: UpdateInsuranceClaimDto, @Request() req: any) {
+    return this.insuranceClaimsService.update(id, updateInsuranceClaimDto, BigInt(req.user.id));
   }
 
   /**
@@ -267,8 +268,9 @@ export class InsuranceClaimsController {
   async updateStatus(
     @Param('id') id: string,
     @Body('status') status: ClaimStatus,
+    @Request() req: any,
   ) {
-    return this.insuranceClaimsService.updateStatus(BigInt(id), status);
+    return this.insuranceClaimsService.updateStatus(id, status, BigInt(req.user.id));
   }
 
   /**
@@ -299,6 +301,6 @@ export class InsuranceClaimsController {
     description: 'Forbidden - Requires admin role',
   })
   async remove(@Param('id') id: string) {
-    return this.insuranceClaimsService.remove(BigInt(id));
+    return this.insuranceClaimsService.remove(id);
   }
 }

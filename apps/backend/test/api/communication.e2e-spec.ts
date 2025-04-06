@@ -82,7 +82,7 @@ describe('Communication API', () => {
     // Clean up any test data if needed
     if (communicationId) {
       try {
-        await prisma.communication.delete({ where: { id: BigInt(communicationId) } });
+        await prisma.communications.delete({ where: { id: BigInt(communicationId) } });
         console.log('Successfully deleted test communication:', communicationId);
       } catch (error) {
         console.error('Error cleaning up test communication:', error);
@@ -90,7 +90,7 @@ describe('Communication API', () => {
     }
     if (clientId) {
       try {
-        await prisma.client.delete({ where: { id: BigInt(clientId) } });
+        await prisma.clients.delete({ where: { id: BigInt(clientId) } });
       } catch (error) {
         console.error('Error cleaning up test client:', error);
       }

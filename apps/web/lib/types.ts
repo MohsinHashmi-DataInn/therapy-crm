@@ -44,7 +44,10 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
+  firstName?: string;
+  lastName?: string;
   role: UserRole;
+  isEmailVerified?: boolean;
   createdAt: string;
   updatedAt: string;
 }

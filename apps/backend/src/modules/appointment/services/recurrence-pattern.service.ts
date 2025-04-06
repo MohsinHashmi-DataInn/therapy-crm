@@ -23,16 +23,17 @@ export class RecurrencePatternService {
     // Validate pattern
     this.validateRecurrencePattern(createRecurrencePatternDto);
 
-    return this.prismaService.recurrencePattern.create({
+    return this.prismaService.appointment_recurrence_patterns.create({
       data: {
         frequency: createRecurrencePatternDto.frequency,
         interval: createRecurrencePatternDto.interval || 1,
-        daysOfWeek: createRecurrencePatternDto.daysOfWeek,
-        startDate: new Date(createRecurrencePatternDto.startDate),
-        endDate: createRecurrencePatternDto.endDate 
+        days_of_week: createRecurrencePatternDto.daysOfWeek,
+        start_date: new Date(createRecurrencePatternDto.startDate),
+        end_date: createRecurrencePatternDto.endDate 
           ? new Date(createRecurrencePatternDto.endDate) 
           : undefined,
-        occurrenceCount: createRecurrencePatternDto.occurrenceCount
+        occurrence_count: createRecurrencePatternDto.occurrenceCount,
+        updated_at: new Date()
       }
     });
   }
@@ -43,15 +44,21 @@ export class RecurrencePatternService {
    * @returns The recurrence pattern
    */
   async findOne(id: bigint) {
-    const pattern = await this.prismaService.recurrencePattern.findUnique({
+    const pattern = await this.prismaService.appointment_recurrence_patterns.findUnique({
       where: { id },
       include: {
         appointments: {
           select: {
             id: true,
+            start_time: true,
+            end_time: true,
             title: true,
-            startTime: true,
-            endTime: true
+            users_appointments_therapist_idTousers: {
+              select: {
+                first_name: true,
+                last_name: true,
+              }
+            }
           }
         }
       }
@@ -233,33 +240,22 @@ export class RecurrencePatternService {
       
       try {
         // Create the appointment and link it to the recurrence pattern
-        const appointment = await this.prismaService.appointment.create({
+        const appointment = await this.prismaService.appointments.create({
           data: {
-            startTime: date,
-            endTime: endDate,
+            start_time: date,
+            end_time: endDate,
             title: appointmentDto.title,
             notes: appointmentDto.notes,
             status: appointmentDto.status,
-            isGroupSession: appointmentDto.isGroupSession || false,
-            maxParticipants: appointmentDto.maxParticipants,
-            client: {
-              connect: { id: BigInt(appointmentDto.clientId) }
-            },
-            learner: appointmentDto.learnerId ? {
-              connect: { id: BigInt(appointmentDto.learnerId) }
-            } : undefined,
-            therapist: {
-              connect: { id: BigInt(appointmentDto.therapistId) }
-            },
-            room: appointmentDto.roomId ? {
-              connect: { id: BigInt(appointmentDto.roomId) }
-            } : undefined,
-            recurrencePattern: {
-              connect: { id: pattern.id }
-            },
-            createdByUser: {
-              connect: { id: userId }
-            }
+            is_group_session: appointmentDto.isGroupSession || false,
+            max_participants: appointmentDto.maxParticipants,
+            client_id: BigInt(appointmentDto.clientId),
+            learner_id: appointmentDto.learnerId ? BigInt(appointmentDto.learnerId) : null,
+            therapist_id: BigInt(appointmentDto.therapistId),
+            room_id: appointmentDto.roomId ? BigInt(appointmentDto.roomId) : null,
+            recurrence_pattern_id: pattern.id,
+            created_by: userId,
+            updated_at: new Date()
           }
         });
         
@@ -269,10 +265,10 @@ export class RecurrencePatternService {
         // Handle additional relationships (staff, equipment, participants)
         if (appointmentDto.staffAssignments && appointmentDto.staffAssignments.length > 0) {
           for (const staff of appointmentDto.staffAssignments) {
-            await this.prismaService.appointmentStaff.create({
+            await this.prismaService.appointment_staff.create({
               data: {
-                appointment: { connect: { id: appointment.id } },
-                user: { connect: { id: BigInt(staff.userId) } },
+                appointment_id: appointment.id,
+                user_id: BigInt(staff.userId),
                 role: staff.role
               }
             });
@@ -281,10 +277,10 @@ export class RecurrencePatternService {
         
         if (appointmentDto.equipmentAssignments && appointmentDto.equipmentAssignments.length > 0) {
           for (const equipment of appointmentDto.equipmentAssignments) {
-            await this.prismaService.appointmentEquipment.create({
+            await this.prismaService.appointment_equipment.create({
               data: {
-                appointment: { connect: { id: appointment.id } },
-                equipment: { connect: { id: BigInt(equipment.equipmentId) } },
+                appointment_id: appointment.id,
+                equipment_id: BigInt(equipment.equipmentId),
                 quantity: equipment.quantity || 1,
                 notes: equipment.notes
               }
@@ -294,10 +290,10 @@ export class RecurrencePatternService {
         
         if (appointmentDto.isGroupSession && appointmentDto.groupParticipants && appointmentDto.groupParticipants.length > 0) {
           for (const participant of appointmentDto.groupParticipants) {
-            await this.prismaService.appointmentGroupParticipant.create({
+            await this.prismaService.appointment_group_participants.create({
               data: {
-                appointment: { connect: { id: appointment.id } },
-                learner: { connect: { id: BigInt(participant.learnerId) } },
+                appointment_id: appointment.id,
+                learner_id: BigInt(participant.learnerId),
                 notes: participant.notes
               }
             });
@@ -381,37 +377,38 @@ export class RecurrencePatternService {
     const pattern = await this.findOne(id);
     
     // Update pattern
-    const updatedPattern = await this.prismaService.recurrencePattern.update({
+    const updatedPattern = await this.prismaService.appointment_recurrence_patterns.update({
       where: { id },
       data: {
         frequency: updateDto.frequency,
         interval: updateDto.interval,
-        daysOfWeek: updateDto.daysOfWeek,
-        startDate: updateDto.startDate ? new Date(updateDto.startDate) : undefined,
-        endDate: updateDto.endDate ? new Date(updateDto.endDate) : undefined,
-        occurrenceCount: updateDto.occurrenceCount
+        days_of_week: updateDto.daysOfWeek,
+        start_date: updateDto.startDate ? new Date(updateDto.startDate) : undefined,
+        end_date: updateDto.endDate ? new Date(updateDto.endDate) : undefined,
+        occurrence_count: updateDto.occurrenceCount,
+        updated_at: new Date()
       }
     });
     
     // If requested, update future appointments based on the new pattern
     if (updateFutureAppointments) {
       // Get all appointments in this recurrence pattern
-      const appointments = await this.prismaService.appointment.findMany({
+      const appointments = await this.prismaService.appointments.findMany({
         where: {
-          recurrencePatternId: id,
-          startTime: { gte: new Date() } // Only future appointments
+          recurrence_pattern_id: id,
+          start_time: { gte: new Date() } // Only future appointments
         },
         orderBy: {
-          startTime: 'asc'
+          start_time: 'asc'
         }
       });
       
       if (appointments.length > 0) {
         // Delete all future appointments
-        await this.prismaService.appointment.deleteMany({
+        await this.prismaService.appointments.deleteMany({
           where: {
-            recurrencePatternId: id,
-            startTime: { gte: new Date() }
+            recurrence_pattern_id: id,
+            start_time: { gte: new Date() }
           }
         });
         
@@ -422,15 +419,15 @@ export class RecurrencePatternService {
         // This is a simplified approach - in a real application, you'd want to preserve
         // any custom changes made to individual recurrences
         const baseAppointment = {
-          startTime: firstAppointment.startTime.toISOString(),
-          endTime: firstAppointment.endTime.toISOString(),
+          startTime: firstAppointment.start_time.toISOString(),
+          endTime: firstAppointment.end_time.toISOString(),
           title: firstAppointment.title,
           notes: firstAppointment.notes,
-          clientId: firstAppointment.clientId.toString(),
-          learnerId: firstAppointment.learnerId?.toString(),
-          therapistId: firstAppointment.therapistId.toString(),
-          roomId: firstAppointment.roomId?.toString(),
-          isGroupSession: firstAppointment.isGroupSession,
+          clientId: firstAppointment.client_id.toString(),
+          learnerId: firstAppointment.learner_id?.toString(),
+          therapistId: firstAppointment.therapist_id.toString(),
+          roomId: firstAppointment.room_id?.toString(),
+          isGroupSession: firstAppointment.is_group_session,
           status: firstAppointment.status,
           // Other fields would need to be fetched separately
         } as any; // Type as 'any' for simplicity
@@ -442,12 +439,12 @@ export class RecurrencePatternService {
           {
             frequency: updatedPattern.frequency,
             interval: updatedPattern.interval,
-            daysOfWeek: updatedPattern.daysOfWeek,
-            startDate: updatedPattern.startDate.toISOString(),
-            endDate: updatedPattern.endDate?.toISOString(),
-            occurrenceCount: updatedPattern.occurrenceCount
+            daysOfWeek: updatedPattern.days_of_week,
+            startDate: updatedPattern.start_date.toISOString(),
+            endDate: updatedPattern.end_date?.toISOString(),
+            occurrenceCount: updatedPattern.occurrence_count
           } as CreateRecurrencePatternDto,
-          firstAppointment.createdById || BigInt(0)
+          firstAppointment.created_by || BigInt(0)
         );
       }
     }
@@ -466,26 +463,26 @@ export class RecurrencePatternService {
     
     if (deleteAppointments) {
       // Delete all associated appointments
-      await this.prismaService.appointment.deleteMany({
+      await this.prismaService.appointments.deleteMany({
         where: {
-          recurrencePatternId: id
+          recurrence_pattern_id: id
         }
       });
     } else {
       // Just unlink the pattern from appointments
-      await this.prismaService.appointment.updateMany({
+      await this.prismaService.appointments.updateMany({
         where: {
-          recurrencePatternId: id
+          recurrence_pattern_id: id
         },
         data: {
-          recurrencePatternId: null,
-          isRecurring: false
+          recurrence_pattern_id: null,
+          is_recurring: false
         }
       });
     }
     
     // Delete the pattern
-    return this.prismaService.recurrencePattern.delete({
+    return this.prismaService.appointment_recurrence_patterns.delete({
       where: { id }
     });
   }

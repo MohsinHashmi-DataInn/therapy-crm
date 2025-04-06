@@ -2,12 +2,23 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import api from '@/lib/api';
-import { User, LoginRequest, LoginResponse } from '@/lib/types';
 import { useToast } from '@/components/ui/use-toast';
+import { AUTH, ROUTES } from '@/lib/constants';
+import * as authApi from '@/lib/api/auth';
+import type { LoginRequest, LoginResponse } from '@/lib/api/auth';
+
+interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  isEmailVerified?: boolean;
+}
 
 interface RegisterData {
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   password: string;
 }
@@ -27,8 +38,8 @@ export const useAuth = () => {
    * Initialize authentication state from localStorage on component mount
    */
   useEffect(() => {
-    const storedToken = localStorage.getItem('auth_token');
-    const storedUser = localStorage.getItem('auth_user');
+    const storedToken = localStorage.getItem(AUTH.TOKEN_KEY);
+    const storedUser = localStorage.getItem(AUTH.USER_KEY);
 
     if (storedToken && storedUser) {
       setToken(storedToken);
@@ -42,8 +53,8 @@ export const useAuth = () => {
    * Store authentication data in localStorage
    */
   const storeAuthData = useCallback((token: string, user: User) => {
-    localStorage.setItem('auth_token', token);
-    localStorage.setItem('auth_user', JSON.stringify(user));
+    localStorage.setItem(AUTH.TOKEN_KEY, token);
+    localStorage.setItem(AUTH.USER_KEY, JSON.stringify(user));
     setToken(token);
     setUser(user);
   }, []);
@@ -52,8 +63,8 @@ export const useAuth = () => {
    * Clear authentication data from localStorage
    */
   const clearAuthData = useCallback(() => {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_user');
+    localStorage.removeItem(AUTH.TOKEN_KEY);
+    localStorage.removeItem(AUTH.USER_KEY);
     setToken(null);
     setUser(null);
   }, []);
@@ -70,14 +81,22 @@ export const useAuth = () => {
       });
       try {
         console.log('[DEBUG] Sending login request to API...');
-        const response = await api.post<LoginResponse>('/auth/login', credentials);
+        const response = await authApi.loginUser(credentials);
         console.log('[DEBUG] Login response received:', { 
-          statusCode: response.status, 
-          hasAccessToken: !!response.data?.accessToken,
-          hasUserData: !!response.data?.user,
+          hasAccessToken: !!response.accessToken,
+          hasUserData: !!response.user,
         });
         
-        const { accessToken, user } = response.data;
+        const { accessToken, user } = response;
+        
+        // Check if email is verified
+        if (user.isEmailVerified === false) {
+          toast({
+            title: 'Email Verification Required',
+            description: 'Please verify your email address to access all features',
+            variant: 'default',
+          });
+        }
         
         console.log('[DEBUG] Storing auth data in localStorage...');
         storeAuthData(accessToken, user);
@@ -85,24 +104,18 @@ export const useAuth = () => {
         toast({
           title: 'Success',
           description: 'Logged in successfully',
-          variant: 'success',
+          variant: 'default',
         });
         
         // Use window.location for a full page navigation instead of Next.js router
         // This ensures a complete page reload and proper auth context initialization
         console.log('[DEBUG] Redirecting to dashboard...');
-        window.location.href = '/dashboard';
+        window.location.href = ROUTES.DASHBOARD;
         return true;
       } catch (error: any) {
         console.error('[DEBUG] Login error:', error);
-        console.error('[DEBUG] Error details:', { 
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data,
-          message: error.message
-        });
         
-        const errorMessage = error.response?.data?.message || 'Login failed';
+        const errorMessage = error.message || 'Login failed';
         console.log('[DEBUG] Error message to display:', errorMessage);
         
         toast({
@@ -116,7 +129,7 @@ export const useAuth = () => {
         setLoading(false);
       }
     },
-    [storeAuthData, toast, router]
+    [storeAuthData, toast]
   );
 
   /**
@@ -126,21 +139,22 @@ export const useAuth = () => {
     async (userData: RegisterData) => {
       setLoading(true);
       try {
-        const response = await api.post<{ user: User; accessToken: string }>('/auth/register', userData);
-        const { accessToken, user } = response.data;
+        const response = await authApi.registerUser(userData);
+        const { accessToken, user } = response;
         
         storeAuthData(accessToken, user);
         
         toast({
           title: 'Success',
-          description: 'Registration successful',
-          variant: 'success',
+          description: 'Registration successful. Please check your email to verify your account.',
+          variant: 'default',
         });
         
-        router.push('/dashboard');
+        // Redirect to dashboard
+        window.location.href = ROUTES.DASHBOARD;
         return true;
       } catch (error: any) {
-        const errorMessage = error.response?.data?.message || 'Registration failed';
+        const errorMessage = error.message || 'Registration failed';
         
         toast({
           title: 'Error',
@@ -153,7 +167,7 @@ export const useAuth = () => {
         setLoading(false);
       }
     },
-    [storeAuthData, toast, router]
+    [storeAuthData, toast]
   );
 
   /**
@@ -164,12 +178,12 @@ export const useAuth = () => {
     toast({
       title: 'Success',
       description: 'Logged out successfully',
-      variant: 'success',
+      variant: 'default',
     });
     // Use window.location for a full page navigation instead of Next.js router
     // This ensures a complete page reload and proper auth context reset
-    window.location.href = '/login';
-  }, [clearAuthData, toast, router]);
+    window.location.href = ROUTES.LOGIN;
+  }, [clearAuthData, toast]);
 
   /**
    * Check if the user is authenticated
@@ -189,6 +203,72 @@ export const useAuth = () => {
     [user]
   );
 
+  /**
+   * Send a verification email to the user
+   */
+  const sendVerificationEmail = useCallback(
+    async (email: string) => {
+      setLoading(true);
+      try {
+        await authApi.sendVerificationEmail(email);
+        
+        toast({
+          title: 'Success',
+          description: 'Verification email sent successfully. Please check your inbox.',
+          variant: 'default',
+        });
+        
+        return true;
+      } catch (error: any) {
+        const errorMessage = error.message || 'Failed to send verification email';
+        
+        toast({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+        
+        return false;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [toast]
+  );
+
+  /**
+   * Request a password reset for the given email
+   */
+  const forgotPassword = useCallback(
+    async (email: string) => {
+      setLoading(true);
+      try {
+        await authApi.forgotPassword({ email });
+        
+        toast({
+          title: 'Success',
+          description: 'Password reset instructions sent to your email',
+          variant: 'default',
+        });
+        
+        return true;
+      } catch (error: any) {
+        const errorMessage = error.message || 'Failed to process password reset request';
+        
+        toast({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+        
+        return false;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [toast]
+  );
+
   return {
     user,
     loading,
@@ -198,5 +278,7 @@ export const useAuth = () => {
     logout,
     isAuthenticated,
     hasRole,
+    sendVerificationEmail,
+    forgotPassword,
   };
 };

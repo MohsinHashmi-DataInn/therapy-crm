@@ -23,7 +23,7 @@ export class ServiceCodesService {
   async create(createServiceCodeDto: CreateServiceCodeDto, userId: bigint) {
     try {
       // Check if service code with the same code already exists
-      const existingCode = await this.prisma.serviceCode.findUnique({
+      const existingCode = await this.prisma.service_codes.findUnique({
         where: { code: createServiceCodeDto.code },
       });
 
@@ -32,17 +32,26 @@ export class ServiceCodesService {
       }
 
       // Create the new service code
-      return this.prisma.serviceCode.create({
+      return this.prisma.service_codes.create({
         data: {
-          ...createServiceCodeDto,
-          createdById: userId,
+          code: createServiceCodeDto.code,
+          description: createServiceCodeDto.description,
+          rate: createServiceCodeDto.defaultRate,
+          billable_unit: createServiceCodeDto.unit,
+          is_active: createServiceCodeDto.isActive ?? true,
+          notes: createServiceCodeDto.guidelines,
+          tax_rate: 0,
+          updated_at: new Date(),
+          created_by: userId,
         },
       });
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof ConflictException) {
         throw error;
       }
-      this.logger.error(`Failed to create service code: ${error.message}`, error.stack);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to create service code: ${errorMessage}`, errorStack);
       throw error;
     }
   }
@@ -66,15 +75,16 @@ export class ServiceCodesService {
         where.category = category;
       }
       
-      return this.prisma.serviceCode.findMany({
+      return this.prisma.service_codes.findMany({
         where,
         orderBy: [
-          { category: 'asc' },
           { code: 'asc' },
         ],
       });
-    } catch (error) {
-      this.logger.error(`Failed to fetch service codes: ${error.message}`, error.stack);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to fetch service codes: ${errorMessage}`, errorStack);
       throw error;
     }
   }
@@ -87,13 +97,12 @@ export class ServiceCodesService {
    */
   async findOne(id: bigint) {
     try {
-      const serviceCode = await this.prisma.serviceCode.findUnique({
+      const serviceCode = await this.prisma.service_codes.findUnique({
         where: { id },
         include: {
           _count: {
             select: {
-              invoiceItems: true,
-              appointmentServices: true,
+              invoice_line_items: true,
             },
           },
         },
@@ -104,11 +113,13 @@ export class ServiceCodesService {
       }
 
       return serviceCode;
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof NotFoundException) {
         throw error;
       }
-      this.logger.error(`Failed to fetch service code with ID ${id}: ${error.message}`, error.stack);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to fetch service code with ID ${id}: ${errorMessage}`, errorStack);
       throw error;
     }
   }
@@ -121,13 +132,12 @@ export class ServiceCodesService {
    */
   async findByCode(code: string) {
     try {
-      const serviceCode = await this.prisma.serviceCode.findUnique({
+      const serviceCode = await this.prisma.service_codes.findUnique({
         where: { code },
         include: {
           _count: {
             select: {
-              invoiceItems: true,
-              appointmentServices: true,
+              invoice_line_items: true,
             },
           },
         },
@@ -138,11 +148,13 @@ export class ServiceCodesService {
       }
 
       return serviceCode;
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof NotFoundException) {
         throw error;
       }
-      this.logger.error(`Failed to fetch service code '${code}': ${error.message}`, error.stack);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to fetch service code '${code}': ${errorMessage}`, errorStack);
       throw error;
     }
   }
@@ -155,14 +167,16 @@ export class ServiceCodesService {
     try {
       const result = await this.prisma.$queryRaw<{category: string}[]>`
         SELECT DISTINCT "category" 
-        FROM "ServiceCode" 
+        FROM "service_codes" 
         WHERE "category" IS NOT NULL 
         ORDER BY "category" ASC
       `;
       
       return result.map(item => item.category);
-    } catch (error) {
-      this.logger.error(`Failed to fetch service code categories: ${error.message}`, error.stack);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to fetch service code categories: ${errorMessage}`, errorStack);
       throw error;
     }
   }
@@ -178,7 +192,7 @@ export class ServiceCodesService {
   async update(id: bigint, updateServiceCodeDto: UpdateServiceCodeDto) {
     try {
       // Check if service code exists
-      const serviceCode = await this.prisma.serviceCode.findUnique({
+      const serviceCode = await this.prisma.service_codes.findUnique({
         where: { id },
       });
 
@@ -188,7 +202,7 @@ export class ServiceCodesService {
 
       // If code is being updated, check for conflicts
       if (updateServiceCodeDto.code && updateServiceCodeDto.code !== serviceCode.code) {
-        const existingCode = await this.prisma.serviceCode.findUnique({
+        const existingCode = await this.prisma.service_codes.findUnique({
           where: { code: updateServiceCodeDto.code },
         });
 
@@ -198,15 +212,25 @@ export class ServiceCodesService {
       }
 
       // Update the service code
-      return this.prisma.serviceCode.update({
+      return this.prisma.service_codes.update({
         where: { id },
-        data: updateServiceCodeDto,
+        data: {
+          ...(updateServiceCodeDto.code && { code: updateServiceCodeDto.code }),
+          ...(updateServiceCodeDto.description && { description: updateServiceCodeDto.description }),
+          ...(updateServiceCodeDto.defaultRate !== undefined && { rate: updateServiceCodeDto.defaultRate }),
+          ...(updateServiceCodeDto.unit && { billable_unit: updateServiceCodeDto.unit }),
+          ...(updateServiceCodeDto.isActive !== undefined && { is_active: updateServiceCodeDto.isActive }),
+          ...(updateServiceCodeDto.guidelines && { notes: updateServiceCodeDto.guidelines }),
+          updated_at: new Date(),
+        },
       });
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof NotFoundException || error instanceof ConflictException) {
         throw error;
       }
-      this.logger.error(`Failed to update service code with ID ${id}: ${error.message}`, error.stack);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to update service code with ID ${id}: ${errorMessage}`, errorStack);
       throw error;
     }
   }
@@ -221,13 +245,12 @@ export class ServiceCodesService {
   async remove(id: bigint) {
     try {
       // Check if service code exists and if it's being used
-      const serviceCode = await this.prisma.serviceCode.findUnique({
+      const serviceCode = await this.prisma.service_codes.findUnique({
         where: { id },
         include: {
           _count: {
             select: {
-              invoiceItems: true,
-              appointmentServices: true,
+              invoice_line_items: true,
             },
           },
         },
@@ -238,22 +261,24 @@ export class ServiceCodesService {
       }
 
       // Check if code is used in invoices or appointments
-      const usageCount = serviceCode._count.invoiceItems + serviceCode._count.appointmentServices;
+      const usageCount = serviceCode._count?.invoice_line_items || 0;
       if (usageCount > 0) {
         throw new ConflictException(
-          `Cannot delete service code that is used in ${serviceCode._count.invoiceItems} invoices and ${serviceCode._count.appointmentServices} appointments`
+          `Cannot delete service code that is used in ${serviceCode._count?.invoice_line_items || 0} invoices`
         );
       }
 
       // Delete the service code
-      return this.prisma.serviceCode.delete({
+      return this.prisma.service_codes.delete({
         where: { id },
       });
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof NotFoundException || error instanceof ConflictException) {
         throw error;
       }
-      this.logger.error(`Failed to delete service code with ID ${id}: ${error.message}`, error.stack);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to delete service code with ID ${id}: ${errorMessage}`, errorStack);
       throw error;
     }
   }

@@ -2,30 +2,31 @@ import { Injectable, NotFoundException, BadRequestException, ConflictException, 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateAppointmentDto, AppointmentType, AppointmentStaffDto, AppointmentEquipmentDto, GroupParticipantDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
-import { AppointmentStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { AppointmentStatus } from '../../types/prisma-models';
 import { TherapyResourceService } from './services/therapy-resource.service';
 import { RecurrencePatternService } from './services/recurrence-pattern.service';
 
 export interface Appointment {
   id: bigint;
-  startTime: Date;
-  endTime: Date;
-  type: string;
+  start_time: Date;
+  end_time: Date;
+  type?: string;
   status: string;
   title?: string;
   notes?: string;
   location?: string;
-  clientId?: bigint | null;
-  learnerId?: bigint | null;
-  therapistId: bigint;
-  createdAt: Date;
-  updatedAt?: Date | null;
-  createdBy?: bigint | null;
-  updatedBy?: bigint | null;
+  client_id?: bigint | null;
+  learner_id?: bigint | null;
+  therapist_id: bigint;
+  created_at: Date;
+  updated_at?: Date | null;
+  created_by?: bigint | null;
+  updated_by?: bigint | null;
   // Include relations for TypeScript purposes
-  client?: any;
-  learner?: any;
-  therapist?: any;
+  clients?: any;
+  learners?: any;
+  users_appointments_therapist_idTousers?: any;
 }
 
 /**
@@ -69,7 +70,7 @@ export class AppointmentService {
     clientId = BigInt(createAppointmentDto.clientId);
       
     // Verify client exists
-    const client = await this.prismaService.client.findUnique({
+    const client = await this.prismaService.clients.findUnique({
       where: { id: clientId },
     });
 
@@ -81,9 +82,9 @@ export class AppointmentService {
       learnerId = BigInt(createAppointmentDto.learnerId);
       
       // Verify learner exists
-      const learner = await this.prismaService.learner.findUnique({
+      const learner = await this.prismaService.learners.findUnique({
         where: { id: learnerId },
-      }) as unknown as { id: bigint; clientId: bigint };
+      }) as unknown as { id: bigint; client_id: bigint };
 
       if (!learner) {
         throw new NotFoundException(`Learner with ID ${createAppointmentDto.learnerId} not found`);
@@ -91,12 +92,12 @@ export class AppointmentService {
 
       // If client ID not provided, get it from learner
       if (!clientId) {
-        clientId = learner.clientId;
+        clientId = learner.client_id;
       }
     }
 
     // Verify therapist exists
-    const therapist = await this.prismaService.user.findUnique({
+    const therapist = await this.prismaService.users.findUnique({
       where: { id: therapistId },
     });
 
@@ -113,55 +114,54 @@ export class AppointmentService {
     );
 
     // Create the appointment
-    return this.prismaService.appointment.create({
+    const appointment = await this.prismaService.appointments.create({
       data: {
-        startTime,
-        endTime,
-        // Remove type field as it's not in the Prisma schema
+        start_time: startTime,
+        end_time: endTime,
         status: createAppointmentDto.status || AppointmentStatus.SCHEDULED,
         title: createAppointmentDto.title,
         notes: createAppointmentDto.notes,
         location: createAppointmentDto.location,
-        client: {
-          connect: { id: clientId }
-        },
-        learner: learnerId ? {
-          connect: { id: learnerId }
-        } : undefined,
-        therapist: {
-          connect: { id: therapistId }
-        },
-        createdByUser: userId ? {
-          connect: { id: userId }
-        } : undefined,
+        client_id: clientId,
+        learner_id: learnerId,
+        therapist_id: therapistId,
+        updated_at: new Date(),
+        created_by: userId,
+        updated_by: userId,
+        is_recurring: createAppointmentDto.isRecurring || false,
+        is_group_session: createAppointmentDto.isGroupSession || false,
+        max_participants: createAppointmentDto.maxParticipants,
+        room_id: createAppointmentDto.roomId ? BigInt(createAppointmentDto.roomId) : null,
       },
       include: {
-        client: {
+        clients: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
             phone: true,
           },
         },
-        learner: {
+        learners: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
           },
         },
-        therapist: {
+        users_appointments_therapist_idTousers: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
           },
         },
       },
     }) as unknown as Appointment;
+    
+    return appointment;
   }
 
   /**
@@ -184,111 +184,116 @@ export class AppointmentService {
   ): Promise<Appointment[]> {
     const where: any = {};
 
-    // Add date range filter if provided
+      // Add date range filters if provided
     if (startDate || endDate) {
-      where.startTime = {};
+      where.start_time = {};
       
       if (startDate) {
-        where.startTime.gte = new Date(startDate);
+        where.start_time.gte = new Date(startDate);
       }
       
       if (endDate) {
-        where.startTime.lte = new Date(endDate);
+        where.start_time.lte = new Date(endDate);
       }
     }
 
     // Add other filters if provided
     if (therapistId) {
-      where.therapistId = BigInt(therapistId);
+      where.therapist_id = BigInt(therapistId);
     }
 
     if (clientId) {
-      where.clientId = BigInt(clientId);
+      where.client_id = BigInt(clientId);
     }
 
     if (learnerId) {
-      where.learnerId = BigInt(learnerId);
+      where.learner_id = BigInt(learnerId);
     }
 
     if (status) {
       where.status = status;
     }
 
-    return this.prismaService.appointment.findMany({
+    return this.prismaService.appointments.findMany({
       where,
       include: {
-        client: {
+        clients: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
             phone: true,
           },
         },
-        learner: {
+        learners: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
           },
         },
-        therapist: {
+        users_appointments_therapist_idTousers: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
           },
         },
       },
       orderBy: {
-        startTime: 'asc',
+        start_time: 'asc',
       },
     }) as unknown as Appointment[];
   }
 
   /**
+   * Remove an appointment
+   * @param id - Appointment ID
+   * @returns The removed appointment
+   */
+    /**
    * Find an appointment by ID
    * @param id - Appointment ID
    * @returns The found appointment
    */
   async findOne(id: bigint): Promise<Appointment> {
-    const appointment = await this.prismaService.appointment.findUnique({
+    const appointment = await this.prismaService.appointments.findUnique({
       where: { id },
       include: {
-        client: {
+        clients: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
             phone: true,
           },
         },
-        learner: {
+        learners: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
           },
         },
-        therapist: {
+        users_appointments_therapist_idTousers: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
           },
         },
       },
-    }) as unknown as Appointment | null;
-
+    });
+    
     if (!appointment) {
       throw new NotFoundException(`Appointment with ID ${id} not found`);
     }
 
-    return appointment;
+    return appointment as unknown as Appointment;
   }
 
   /**
@@ -303,161 +308,78 @@ export class AppointmentService {
     updateAppointmentDto: UpdateAppointmentDto,
     userId: bigint
   ): Promise<Appointment> {
-    // Check if appointment exists
-    const existingAppointment = await this.findOne(id);
+    // Find appointment to ensure it exists
+    await this.findOne(id);
 
-    // Prepare update data
-    const updateData: any = {
-      updatedBy: userId,
-    };
+    // Extract data from DTO
+    const {
+      startTime,
+      endTime,
+      clientId,
+      learnerId,
+      therapistId,
+      location,
+      roomId,
+      // Remove locationId if it doesn't exist in UpdateAppointmentDto
+      ...rest
+    } = updateAppointmentDto;
 
-    // Handle start and end time updates
-    let startTime = existingAppointment.startTime;
-    let endTime = existingAppointment.endTime;
+    // Convert to Date objects if provided
+    const updatedStartTime = startTime ? new Date(startTime) : undefined;
+    const updatedEndTime = endTime ? new Date(endTime) : undefined;
 
-    if (updateAppointmentDto.startTime) {
-      startTime = new Date(updateAppointmentDto.startTime);
-      updateData.startTime = startTime;
-    }
-
-    if (updateAppointmentDto.endTime) {
-      endTime = new Date(updateAppointmentDto.endTime);
-      updateData.endTime = endTime;
-    }
-
-    // Validate times if either start or end time is updated
-    if (updateAppointmentDto.startTime || updateAppointmentDto.endTime) {
-      this.validateAppointmentTimes(startTime, endTime);
-    }
-
-    // Handle ID updates and validate entities exist
-    let therapistId = existingAppointment.therapistId;
-    if (updateAppointmentDto.therapistId) {
-      therapistId = BigInt(updateAppointmentDto.therapistId);
-      
-      // Verify therapist exists
-      const therapist = await this.prismaService.user.findUnique({
-        where: { id: therapistId },
-      });
-
-      if (!therapist) {
-        throw new NotFoundException(`Therapist with ID ${updateAppointmentDto.therapistId} not found`);
-      }
-
-      updateData.therapistId = therapistId;
-    }
-
-    let clientId = existingAppointment.clientId;
-    if (updateAppointmentDto.clientId !== undefined) {
-      if (updateAppointmentDto.clientId) {
-        clientId = BigInt(updateAppointmentDto.clientId);
-        
-        // Verify client exists
-        const client = await this.prismaService.client.findUnique({
-          where: { id: clientId },
-        });
-
-        if (!client) {
-          throw new NotFoundException(`Client with ID ${updateAppointmentDto.clientId} not found`);
-        }
-      } else {
-        clientId = null;
-      }
-
-      updateData.clientId = clientId;
-    }
-
-    let learnerId = existingAppointment.learnerId;
-    if (updateAppointmentDto.learnerId !== undefined) {
-      if (updateAppointmentDto.learnerId) {
-        learnerId = BigInt(updateAppointmentDto.learnerId);
-        
-        // Verify learner exists
-        const learner = await this.prismaService.learner.findUnique({
-          where: { id: learnerId },
-        }) as unknown as { id: bigint; clientId: bigint };
-
-        if (!learner) {
-          throw new NotFoundException(`Learner with ID ${updateAppointmentDto.learnerId} not found`);
-        }
-
-        // If client ID not provided, get it from learner
-        if (clientId === null && !updateAppointmentDto.clientId) {
-          const learner = await this.prismaService.learner.findUnique({
-            where: { id: learnerId },
-          }) as unknown as { id: bigint; clientId: bigint };
-          
-          clientId = learner.clientId;
-          updateData.clientId = clientId;
-        }
-      } else {
-        learnerId = null;
-      }
-
-      updateData.learnerId = learnerId;
-    }
-
-    // Add other fields to update data
-    if (updateAppointmentDto.type !== undefined) {
-      updateData.type = updateAppointmentDto.type;
-    }
-
-    if (updateAppointmentDto.status !== undefined) {
-      updateData.status = updateAppointmentDto.status;
-    }
-
-    if (updateAppointmentDto.title !== undefined) {
-      updateData.title = updateAppointmentDto.title;
-    }
-
-    if (updateAppointmentDto.notes !== undefined) {
-      updateData.notes = updateAppointmentDto.notes;
-    }
-
-    if (updateAppointmentDto.location !== undefined) {
-      updateData.location = updateAppointmentDto.location;
-    }
-
-    // Check for appointment conflicts if times or therapist changed
-    if (
-      updateAppointmentDto.startTime ||
-      updateAppointmentDto.endTime ||
-      updateAppointmentDto.therapistId
-    ) {
+    // Check for appointment conflicts if both date fields are provided
+    if (updatedStartTime && updatedEndTime && therapistId) {
       await this.checkForAppointmentConflicts(
-        therapistId,
-        id,
-        startTime,
-        endTime
+        BigInt(therapistId),
+        id, // Exclude current appointment from conflict check
+        updatedStartTime,
+        updatedEndTime
       );
     }
 
+    // Build the update data
+    const updateData: any = {
+      ...rest,
+      updated_at: new Date(),
+      updated_by: userId,
+    };
+
+    // Add optional fields if they are provided
+    if (updatedStartTime) updateData.start_time = updatedStartTime;
+    if (updatedEndTime) updateData.end_time = updatedEndTime;
+    if (clientId !== undefined) updateData.client_id = clientId ? BigInt(clientId) : null;
+    if (learnerId !== undefined) updateData.learner_id = learnerId ? BigInt(learnerId) : null;
+    if (therapistId) updateData.therapist_id = BigInt(therapistId);
+    if (location !== undefined) updateData.location = location;
+    if (roomId !== undefined) updateData.room_id = roomId ? BigInt(roomId) : null;
+
     // Update the appointment
-    return this.prismaService.appointment.update({
+    return this.prismaService.appointments.update({
       where: { id },
       data: updateData,
       include: {
-        client: {
+        clients: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
             phone: true,
           },
         },
-        learner: {
+        learners: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
           },
         },
-        therapist: {
+        users_appointments_therapist_idTousers: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
           },
         },
@@ -475,65 +397,37 @@ export class AppointmentService {
     await this.findOne(id);
 
     // Delete the appointment
-    return this.prismaService.appointment.delete({
-      where: { id },
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
-        learner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        therapist: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
+  return this.prismaService.appointments.delete({
+    where: { id },
+    include: {
+      clients: {
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          phone: true,
         },
       },
-    }) as unknown as Appointment;
+      learners: {
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+        },
+      },
+      users_appointments_therapist_idTousers: {
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+        },
+      },
+    },
+  }) as unknown as Appointment;
   }
-
-  /**
-   * Validate appointment start and end times
-   * @param startTime - Appointment start time
-   * @param endTime - Appointment end time
-   */
-  private validateAppointmentTimes(startTime: Date, endTime: Date): void {
-    // Check if start time is in the past
-    if (startTime < new Date()) {
-      throw new BadRequestException('Start time cannot be in the past');
-    }
-
-    // Check if end time is before start time
-    if (endTime <= startTime) {
-      throw new BadRequestException('End time must be after start time');
-    }
-
-    // Check if appointment is too short (e.g., less than 15 minutes)
-    const durationMinutes = (endTime.getTime() - startTime.getTime()) / (1000 * 60);
-    if (durationMinutes < 15) {
-      throw new BadRequestException('Appointment duration must be at least 15 minutes');
-    }
-
-    // Check if appointment is too long (e.g., more than 4 hours)
-    if (durationMinutes > 240) {
-      throw new BadRequestException('Appointment duration cannot exceed 4 hours');
-    }
-  }
-
+  
   /**
    * Check for appointment conflicts
    * @param therapistId - Therapist ID
@@ -549,18 +443,18 @@ export class AppointmentService {
   ): Promise<void> {
     // Create base query to find conflicting appointments
     const whereCondition: any = {
-      therapistId,
+      therapist_id: therapistId,
       status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.COMPLETED] },
       OR: [
         {
           // Case 1: New appointment starts during an existing appointment
-          startTime: { lt: endTime },
-          endTime: { gt: startTime },
+          start_time: { lt: endTime },
+          end_time: { gt: startTime },
         },
         {
           // Case 2: New appointment contains an existing appointment
-          startTime: { gte: startTime },
-          endTime: { lte: endTime },
+          start_time: { gte: startTime },
+          end_time: { lte: endTime },
         },
       ],
     };
@@ -571,38 +465,38 @@ export class AppointmentService {
     }
 
     // Find conflicting appointments
-    const conflictingAppointments = await this.prismaService.appointment.findMany({
+    const conflictingAppointments = await this.prismaService.appointments.findMany({
       where: whereCondition,
       select: {
         id: true,
-        startTime: true,
-        endTime: true,
+        start_time: true,
+        end_time: true,
         title: true,
-        therapist: {
+        users_appointments_therapist_idTousers: {
           select: {
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
           },
         },
       },
     });
-
+    
     // Throw error if conflicts found
     if (conflictingAppointments.length > 0) {
       const conflict = conflictingAppointments[0] as unknown as {
         id: bigint;
-        startTime: Date;
-        endTime: Date;
+        start_time: Date;
+        end_time: Date;
         title: string;
-        therapist: {
-          firstName: string;
-          lastName: string;
+        users_appointments_therapist_idTousers: {
+          first_name: string;
+          last_name: string;
         };
       };
       
-      const conflictStart = conflict.startTime.toLocaleTimeString();
-      const conflictEnd = conflict.endTime.toLocaleTimeString();
-      const therapistName = `${conflict.therapist.firstName} ${conflict.therapist.lastName}`;
+      const conflictStart = conflict.start_time.toLocaleTimeString();
+      const conflictEnd = conflict.end_time.toLocaleTimeString();
+      const therapistName = `${conflict.users_appointments_therapist_idTousers.first_name} ${conflict.users_appointments_therapist_idTousers.last_name}`;
       
       throw new ConflictException(
         `Appointment conflicts with existing appointment for ${therapistName} from ${conflictStart} to ${conflictEnd}`

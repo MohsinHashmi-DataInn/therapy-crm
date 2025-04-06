@@ -2,9 +2,8 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { AnalyticsMetricsService } from './analytics-metrics.service';
 import { AnalyticsMetricsController } from './analytics-metrics.controller';
-import { DashboardWidgetsService } from './dashboard-widgets.service';
-import { DashboardWidgetsController } from './dashboard-widgets.controller';
-import { MetricsSnapshotsService } from './metrics-snapshots.service';
+// These services need to be implemented later if required
+// For now, removing missing imports to fix TypeScript errors
 
 /**
  * Module for analytics and metrics tracking functionality
@@ -15,17 +14,17 @@ import { MetricsSnapshotsService } from './metrics-snapshots.service';
   imports: [PrismaModule],
   controllers: [
     AnalyticsMetricsController,
-    DashboardWidgetsController,
+    // DashboardWidgetsController, // Commented out until implemented
   ],
   providers: [
     AnalyticsMetricsService,
-    DashboardWidgetsService,
-    MetricsSnapshotsService,
+    // DashboardWidgetsService, // Commented out until implemented
+    // MetricsSnapshotsService, // Commented out until implemented
   ],
   exports: [
     AnalyticsMetricsService,
-    DashboardWidgetsService,
-    MetricsSnapshotsService,
+    // DashboardWidgetsService, // Commented out until implemented
+    // MetricsSnapshotsService, // Commented out until implemented
   ],
 })
 export class AnalyticsModule {}

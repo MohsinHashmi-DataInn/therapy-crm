@@ -1,6 +1,7 @@
 import { ApiProperty, PartialType, OmitType } from '@nestjs/swagger';
-import { CreateInsuranceClaimDto, ClaimStatus } from './create-insurance-claim.dto';
+import { CreateInsuranceClaimDto } from './create-insurance-claim.dto';
 import { IsOptional, IsEnum, IsArray, IsString, IsNumber, Min } from 'class-validator';
+import { ClaimStatus } from '../../../types/prisma-models';
 import { Type } from 'class-transformer';
 
 /**
