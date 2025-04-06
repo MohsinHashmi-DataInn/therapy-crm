@@ -76,13 +76,10 @@ export default function RegisterPage() {
       const firstName = nameParts[0];
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
       
-      // Use the auth context register function
-      const success = await register({
-        firstName,
-        lastName,
-        email: data.email,
-        password: data.password
-      });
+      // Use the auth context register function - note the expected parameter order
+      // The register function expects (email, password, name) not an object with properties
+      const fullName = `${firstName} ${lastName}`.trim();
+      const success = await register(data.email, data.password, fullName);
       
       if (success) {
         // Show the verification reminder rather than immediately redirecting

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AUTH, ROUTES } from '@/lib/constants';
+import { AUTH } from '@/lib/constants';
+import { ROUTES, isAuthRoute, isProtectedRoute, isPublicRoute } from '@/lib/routes';
 
 /**
  * Middleware to protect routes requiring authentication
@@ -7,31 +8,28 @@ import { AUTH, ROUTES } from '@/lib/constants';
  * Redirects to login page if not authenticated
  */
 export async function middleware(request: NextRequest) {
-  const token = request.cookies.get(AUTH.TOKEN_KEY)?.value;
+  // Check for token in both cookies and authorization header
+  const cookieToken = request.cookies.get(AUTH.TOKEN_KEY)?.value;
+  const headerToken = request.headers.get('Authorization')?.replace('Bearer ', '');
+  const token = cookieToken || headerToken;
   
   // Path being accessed
   const path = request.nextUrl.pathname;
   
-  // Check if this is a protected route (dashboard routes)
-  const isDashboardRoute = path.startsWith('/dashboard');
-
-  // Check if this is an auth route (login, register, etc.)
-  const isAuthRoute = path.startsWith('/login') || 
-                     path.startsWith('/register') || 
-                     path.startsWith('/verify-email') || 
-                     path.startsWith('/forgot-password') || 
-                     path.startsWith('/reset-password');
-
-  // Public routes that don't require authentication
-  const isPublicRoute = path === '/' || path.startsWith('/api/') || path.startsWith('/_next');
+  // Log (for debugging only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[Middleware] Path: ${path}, Token: ${token ? 'exists' : 'missing'}`);
+  }
 
   // If token exists but user is trying to access auth routes, redirect to dashboard
-  if (token && isAuthRoute) {
+  if (token && isAuthRoute(path)) {
+    console.log('[Middleware] Authenticated user accessing auth route - redirecting to dashboard');
     return NextResponse.redirect(new URL(ROUTES.DASHBOARD, request.url));
   }
 
   // If no token and trying to access protected routes, redirect to login
-  if (!token && isDashboardRoute) {
+  if (!token && isProtectedRoute(path)) {
+    console.log('[Middleware] Unauthenticated user accessing protected route - redirecting to login');
     return NextResponse.redirect(new URL(ROUTES.LOGIN, request.url));
   }
 

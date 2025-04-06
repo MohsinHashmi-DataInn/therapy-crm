@@ -23,12 +23,8 @@ export default function DashboardLayout({
   // Use the auth context for authentication state
   const { user, loading, isAuthenticated } = useAuth();
   
-  // Redirect to login if not authenticated once loading is complete
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push(ROUTES.LOGIN);
-    }
-  }, [loading, user, router]);
+  // Redirection is now handled centrally in the AuthProvider
+  // No need for duplicate redirect logic here
   
   // Get the page title based on the current path
   const getPageTitle = (path: string) => {
@@ -54,8 +50,9 @@ export default function DashboardLayout({
   }
 
   // Only render dashboard content if authenticated
-  if (!user || !isAuthenticated()) {
-    return null; // Router will redirect, this prevents flash of dashboard content
+  // This is a visual guard only - actual redirect happens in AuthProvider
+  if (!user) {
+    return null; // Don't render content for unauthenticated users
   }
 
   return (
@@ -82,9 +79,9 @@ export default function DashboardLayout({
           <div className="py-6 md:py-8">
             <div className="mb-6 flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
               <div className="grid gap-1">
-                <h1 className="text-2xl font-bold tracking-tight">{getPageTitle(pathname)}</h1>
+                <h1 className="text-2xl font-bold tracking-tight">{getPageTitle(pathname || '')}</h1>
                 <p className="text-muted-foreground">
-                  Manage your {getPageTitle(pathname).toLowerCase()} efficiently
+                  Manage your {getPageTitle(pathname || '').toLowerCase()} efficiently
                 </p>
               </div>
             </div>

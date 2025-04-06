@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { ClientSessionsDashboard } from '@/components/telehealth/ClientSessionsDashboard';
-import { useAuth } from '@/contexts/auth-context';
-import { UserRole } from '@/types/auth';
+import { useAuth } from '@/contexts/auth-provider';
+import { UserRole } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TherapistSessionsDashboard } from '@/components/telehealth/TherapistSessionsDashboard';
 
@@ -11,9 +11,9 @@ import { TherapistSessionsDashboard } from '@/components/telehealth/TherapistSes
  * Telehealth page that displays the appropriate dashboard based on user role
  */
 export default function TelehealthPage() {
-  const { user, isLoading } = useAuth();
+  const { user, loading } = useAuth();
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="container mx-auto px-4 py-6 space-y-6">
         <Skeleton className="h-8 w-64" />
@@ -25,7 +25,7 @@ export default function TelehealthPage() {
   // Display proper dashboard based on user role
   return (
     <div className="min-h-screen">
-      {user?.role === UserRole.THERAPIST ? (
+      {user?.role === UserRole.STAFF ? (
         <TherapistSessionsDashboard />
       ) : (
         <ClientSessionsDashboard />

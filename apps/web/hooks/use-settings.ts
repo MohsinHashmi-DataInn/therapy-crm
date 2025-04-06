@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from 'react';
 import api from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
-import { useAuth } from './use-auth';
+import { useAuth } from '@/contexts/auth-provider';
 
 // Types for settings forms
 export interface UserProfile {
