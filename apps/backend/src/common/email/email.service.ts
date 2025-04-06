@@ -1,5 +1,4 @@
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
-import { MailerService } from '@nestjs-modules/mailer';
+import { Injectable, Logger } from '@nestjs/common';
 
 /**
  * Email template data interface
@@ -29,74 +28,55 @@ export interface EmailAttachment {
  * Email sending options interface
  */
 export interface SendEmailOptions {
-  to: EmailRecipient | EmailRecipient[];
+  to: string | EmailRecipient | (string | EmailRecipient)[];
   subject: string;
-  template?: string;
-  templateData?: EmailTemplateData;
-  html?: string;
   text?: string;
-  cc?: EmailRecipient | EmailRecipient[];
-  bcc?: EmailRecipient | EmailRecipient[];
+  html?: string;
+  template?: string;
+  context?: EmailTemplateData;
   attachments?: EmailAttachment[];
-  replyTo?: string;
+  cc?: string | EmailRecipient | (string | EmailRecipient)[];
+  bcc?: string | EmailRecipient | (string | EmailRecipient)[];
 }
 
 /**
  * Service for sending email notifications
+ * MOCK IMPLEMENTATION FOR DEVELOPMENT
  */
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
-  constructor(private readonly mailerService: MailerService) {}
+  constructor() {
+    this.logger.log('Mock EmailService initialized');
+  }
 
   /**
-   * Send an email
+   * Send an email - MOCK IMPLEMENTATION
    * @param options Email sending options
    * @returns Promise resolving to success boolean
    */
   async sendEmail(options: SendEmailOptions): Promise<boolean> {
-    try {
-      this.logger.log(`Sending email to ${typeof options.to === 'string' ? options.to : 'multiple recipients'}`);
-      
-      const to = Array.isArray(options.to) 
-        ? options.to.map(recipient => this.formatRecipient(recipient)) 
-        : this.formatRecipient(options.to);
-      
-      const cc = options.cc ? (Array.isArray(options.cc) 
-        ? options.cc.map(recipient => this.formatRecipient(recipient)) 
-        : this.formatRecipient(options.cc)) : undefined;
-        
-      const bcc = options.bcc ? (Array.isArray(options.bcc) 
-        ? options.bcc.map(recipient => this.formatRecipient(recipient)) 
-        : this.formatRecipient(options.bcc)) : undefined;
-
-      const emailOptions: any = {
-        to,
-        subject: options.subject,
-        ...(options.template && { template: options.template }),
-        ...(options.templateData && { context: options.templateData }),
-        ...(options.html && { html: options.html }),
-        ...(options.text && { text: options.text }),
-        ...(cc && { cc }),
-        ...(bcc && { bcc }),
-        ...(options.attachments && { attachments: options.attachments }),
-        ...(options.replyTo && { replyTo: options.replyTo }),
-      };
-
-      await this.mailerService.sendMail(emailOptions);
-      this.logger.log(`Email sent successfully to ${typeof to === 'string' ? to : 'multiple recipients'}`);
-      return true;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(`Failed to send email: ${errorMessage}`, errorStack);
-      throw new InternalServerErrorException(`Failed to send email: ${errorMessage}`);
+    this.logger.log(`[MOCK] Would send email to: ${JSON.stringify(options.to)}`);
+    this.logger.log(`[MOCK] Subject: ${options.subject}`);
+    
+    if (options.text) {
+      this.logger.log(`[MOCK] Text content: ${options.text.substring(0, 50)}...`);
     }
+    
+    if (options.html) {
+      this.logger.log(`[MOCK] HTML content available (not shown)`);
+    }
+    
+    if (options.attachments) {
+      this.logger.log(`[MOCK] Attachments: ${options.attachments.length}`);
+    }
+    
+    return true;
   }
 
   /**
-   * Send a simple text email
+   * Send a simple text email - MOCK IMPLEMENTATION
    * @param to Recipient email or recipient object
    * @param subject Email subject
    * @param text Email text content
@@ -112,7 +92,7 @@ export class EmailService {
   }
 
   /**
-   * Send an HTML email
+   * Send an HTML email - MOCK IMPLEMENTATION
    * @param to Recipient email or recipient object
    * @param subject Email subject
    * @param html Email HTML content
@@ -128,14 +108,19 @@ export class EmailService {
   }
 
   /**
-   * Format recipient for email sending
-   * @param recipient Email recipient
+   * Helper method to format a recipient for display in logs
+   * @param recipient String or EmailRecipient object
    * @returns Formatted recipient string
    */
-  private formatRecipient(recipient: EmailRecipient): string {
-    if (recipient.name) {
-      return `"${recipient.name}" <${recipient.email}>`;
+  private formatRecipient(recipient: string | EmailRecipient): string {
+    if (typeof recipient === 'string') {
+      return recipient;
     }
+    
+    if (recipient.name) {
+      return `${recipient.name} <${recipient.email}>`;
+    }
+    
     return recipient.email;
   }
 }

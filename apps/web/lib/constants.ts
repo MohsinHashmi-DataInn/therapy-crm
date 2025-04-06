@@ -2,7 +2,7 @@
  * API base URL for backend requests
  * In production, ensure this is set to the correct URL in environment variables
  */
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 /**
  * Frontend base URL for generating links
@@ -51,5 +51,27 @@ export const ROUTES = {
   FORGOT_PASSWORD: '/forgot-password',
   RESET_PASSWORD: '/reset-password',
   VERIFY_EMAIL: '/verify-email',
-  PROFILE: '/profile',
+  PRIVACY_POLICY: '/privacy-policy',
+  TERMS_OF_SERVICE: '/terms-of-service',
+  SETTINGS: '/dashboard/settings',
+  PROFILE: '/dashboard/profile',
+  CLIENTS: '/dashboard/clients',
+  NEW_CLIENT: '/dashboard/clients/new',
+  CLIENT_DETAILS: (id: string) => `/dashboard/clients/${id}`,
+  EDIT_CLIENT: (id: string) => `/dashboard/clients/${id}/edit`,
+  
+  APPOINTMENTS: '/dashboard/appointments',
+  NEW_APPOINTMENT: '/dashboard/appointments/new',
+  APPOINTMENT_DETAILS: (id: string) => `/dashboard/appointments/${id}`,
+  EDIT_APPOINTMENT: (id: string) => `/dashboard/appointments/${id}/edit`,
+  
+  WAITLIST: '/dashboard/waitlist',
+  ADD_WAITLIST: '/dashboard/waitlist/add',
+  WAITLIST_DETAILS: (id: string) => `/dashboard/waitlist/${id}`,
+  EDIT_WAITLIST: (id: string) => `/dashboard/waitlist/${id}/edit`,
+
+  TELEHEALTH: '/dashboard/telehealth',
+  TELEHEALTH_SESSION: (id: string) => `/dashboard/telehealth/sessions/${id}`,
+
+  COMMUNICATIONS: '/dashboard/communications',
 };

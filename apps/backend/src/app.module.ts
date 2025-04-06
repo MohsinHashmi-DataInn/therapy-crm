@@ -15,6 +15,7 @@ import { BillingModule } from './modules/billing/billing.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { DocumentStorageModule } from './modules/document-storage/document-storage.module';
 import { TelehealthModule } from './modules/telehealth/telehealth.module';
+import { EmailModule } from './common/email/email.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { TelehealthModule } from './modules/telehealth/telehealth.module';
     NotificationsModule,
     DocumentStorageModule,
     TelehealthModule,
+    EmailModule,
   ],
 })
 export class AppModule {}
