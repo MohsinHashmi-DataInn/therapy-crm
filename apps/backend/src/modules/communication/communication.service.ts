@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateCommunicationDto } from './dto/create-communication.dto';
 import { UpdateCommunicationDto } from './dto/update-communication.dto';
+import { Prisma } from '@prisma/client';
 
 // Define Communication interface locally to match Prisma schema
 export interface Communication {
@@ -42,7 +43,7 @@ export class CommunicationService {
     try {
       // Verify client exists
       const clientId = BigInt(createCommunicationDto.clientId);
-      const client = await this.prismaService.client.findUnique({
+      const client = await this.prismaService.clients.findUnique({
         where: { id: clientId },
       });
 
@@ -55,7 +56,7 @@ export class CommunicationService {
       if (createCommunicationDto.learnerId) {
         learnerId = BigInt(createCommunicationDto.learnerId);
         // Verify learner exists
-        const learner = await this.prismaService.learner.findUnique({
+        const learner = await this.prismaService.learners.findUnique({
           where: { id: learnerId },
         });
 
@@ -69,7 +70,7 @@ export class CommunicationService {
       if (createCommunicationDto.appointmentId) {
         appointmentId = BigInt(createCommunicationDto.appointmentId);
         // Verify appointment exists
-        const appointment = await this.prismaService.appointment.findUnique({
+        const appointment = await this.prismaService.appointments.findUnique({
           where: { id: appointmentId },
         });
 
@@ -81,35 +82,57 @@ export class CommunicationService {
       // Get sentAt date, default to current date if not provided
       const sentAt = createCommunicationDto.sentAt ? new Date(createCommunicationDto.sentAt) : new Date();
 
-      // Create the communication
-      const communication = await this.prismaService.communication.create({
-        data: {
-          type: createCommunicationDto.type,
-          subject: createCommunicationDto.subject,
-          content: createCommunicationDto.content,
-          sentAt,
-          notes: createCommunicationDto.notes,
-          clientId,
-          learnerId,
-          appointmentId,
-          createdBy: userId,
-          userId: userId // Set the user who created the communication
+      // Prepare the communication data
+      const communicationData: any = {
+        type: createCommunicationDto.type,
+        subject: createCommunicationDto.subject,
+        content: createCommunicationDto.content,
+        sent_at: sentAt,
+        notes: createCommunicationDto.notes,
+        updated_at: new Date(),
+        // Handle relations properly
+        clients: {
+          connect: { id: clientId }
         },
+        users_communications_created_byTousers: {
+          connect: { id: userId }
+        },
+        users_communications_user_idTousers: {
+          connect: { id: userId }
+        }
+      };
+      
+      // Add optional relations if provided
+      if (learnerId) {
+        communicationData.learners = {
+          connect: { id: learnerId }
+        };
+      }
+      
+      if (appointmentId) {
+        communicationData.appointments = {
+          connect: { id: appointmentId }
+        };
+      }
+      
+      // Create the communication
+      const communication = await this.prismaService.communications.create({
+        data: communicationData,
         include: {
-          client: {
+          clients: {
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
+              first_name: true,
+              last_name: true,
               email: true,
               phone: true,
             },
           },
-          learner: {
+          learners: {
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
+              first_name: true,
+              last_name: true,
             },
           },
         },
@@ -152,28 +175,27 @@ export class CommunicationService {
       where.type = type;
     }
 
-    const communications = await this.prismaService.communication.findMany({
+    const communications = await this.prismaService.communications.findMany({
       where,
       include: {
-        client: {
+        clients: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
-            phone: true,
           },
         },
-        learner: {
+        learners: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
           },
         },
       },
       orderBy: {
-        sentAt: 'desc',
+        sent_at: 'desc',
       },
     }) as unknown as Communication[];
 
@@ -187,26 +209,32 @@ export class CommunicationService {
    */
   async findOne(id: bigint): Promise<Communication> {
     try {
-      const communication = await this.prismaService.communication.findUnique({
+      const communication = await this.prismaService.communications.findUnique({
         where: { id },
         include: {
-          client: {
+          clients: {
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
+              first_name: true,
+              last_name: true,
               email: true,
-              phone: true,
             },
           },
-          learner: {
+          learners: {
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
+              first_name: true,
+              last_name: true,
             },
           },
-          appointment: true
+          appointments: {
+            select: {
+              id: true,
+              start_time: true,
+              end_time: true,
+              status: true,
+            },
+          },
         },
       });
       if (!communication) {
@@ -265,7 +293,7 @@ export class CommunicationService {
         const clientId = BigInt(updateCommunicationDto.clientId);
         
         // Verify client exists
-        const client = await this.prismaService.client.findUnique({
+        const client = await this.prismaService.clients.findUnique({
           where: { id: clientId },
         });
 
@@ -284,7 +312,7 @@ export class CommunicationService {
         
         if (updateData.learnerId) {
           // Verify learner exists
-          const learner = await this.prismaService.learner.findUnique({
+          const learner = await this.prismaService.learners.findUnique({
             where: { id: updateData.learnerId },
           });
 
@@ -302,7 +330,7 @@ export class CommunicationService {
         
         if (updateData.appointmentId) {
           // Verify appointment exists
-          const appointment = await this.prismaService.appointment.findUnique({
+          const appointment = await this.prismaService.appointments.findUnique({
             where: { id: updateData.appointmentId },
           });
 
@@ -321,24 +349,24 @@ export class CommunicationService {
       updateData.updatedBy = userId;
 
       // Update the communication
-      const updatedCommunication = await this.prismaService.communication.update({
+      const updatedCommunication = await this.prismaService.communications.update({
         where: { id },
         data: updateData,
         include: {
-          client: {
+          clients: {
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
+              first_name: true,
+              last_name: true,
               email: true,
               phone: true,
             },
           },
-          learner: {
+          learners: {
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
+              first_name: true,
+              last_name: true,
             },
           },
         },
@@ -365,7 +393,7 @@ export class CommunicationService {
   async remove(id: bigint): Promise<void> {
     try {
       // Check if the communication exists before trying to delete it
-      const communication = await this.prismaService.communication.findUnique({
+      const communication = await this.prismaService.communications.findUnique({
         where: { id },
       });
 
@@ -373,7 +401,7 @@ export class CommunicationService {
         throw new NotFoundException(`Communication with ID ${id} not found`);
       }
 
-      await this.prismaService.communication.delete({
+      await this.prismaService.communications.delete({
         where: { id },
       });
     } catch (error) {

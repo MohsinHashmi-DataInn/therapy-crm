@@ -1,33 +1,32 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
 // Define Client interface locally to match Prisma schema
 export interface Client {
   id: bigint;
-  firstName: string;
-  lastName: string;
+  first_name: string;
+  last_name: string;
   email?: string;
-  phone?: string;
-  dateOfBirth?: Date;
+  phone: string;
   address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
   status: string;
-  priority?: string;
-  therapistId?: bigint | null;
-  insuranceProvider?: string;
+  priority: string;
+  notes?: string;
+  therapist_id?: bigint | null;
+  created_at: Date;
+  updated_at: Date;
+  created_by?: bigint | null;
+  updated_by?: bigint | null;
+  preferred_language?: string;
+  requires_interpreter?: boolean;
+  interpreter_notes?: string;
   insurancePolicyNumber?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   emergencyContactRelationship?: string;
-  notes?: string;
-  createdAt: Date;
-  updatedAt?: Date;
-  createdBy?: bigint;
-  updatedBy?: bigint;
 }
 
 /**
@@ -46,7 +45,7 @@ export class ClientService {
   async create(createClientDto: CreateClientDto, userId: bigint): Promise<Client> {
     // Check if client with this email already exists (if email provided)
     if (createClientDto.email) {
-      const existingClient = await this.prismaService.client.findUnique({
+      const existingClient = await this.prismaService.clients.findUnique({
         where: { email: createClientDto.email },
       });
 
@@ -62,19 +61,34 @@ export class ClientService {
     }
 
     // Create the client
-    const client = await this.prismaService.client.create({
-      data: {
-        firstName: createClientDto.firstName,
-        lastName: createClientDto.lastName,
-        email: createClientDto.email,
-        phone: createClientDto.phone,
-        address: createClientDto.address,
-        status: createClientDto.status,
-        priority: createClientDto.priority,
-        notes: createClientDto.notes,
-        therapistId: therapistId,
-        createdBy: userId,
-      },
+    // Prepare client data for creation
+    const clientData: any = {
+      first_name: createClientDto.firstName,
+      last_name: createClientDto.lastName,
+      email: createClientDto.email,
+      phone: createClientDto.phone,
+      address: createClientDto.address,
+      status: createClientDto.status,
+      priority: createClientDto.priority,
+      notes: createClientDto.notes,
+      updated_at: new Date()
+    };
+    
+    // Handle relations separately
+    if (therapistId) {
+      clientData.users_clients_therapist_idTousers = {
+        connect: { id: therapistId }
+      };
+    }
+    
+    if (userId) {
+      clientData.users_clients_created_byTousers = {
+        connect: { id: userId }
+      };
+    }
+    
+    const client = await this.prismaService.clients.create({
+      data: clientData,
     }) as unknown as Client;
 
     return client;
@@ -91,27 +105,27 @@ export class ClientService {
 
     // Add filters if provided
     if (therapistId) {
-      where.therapistId = BigInt(therapistId);
+      where.therapist_id = BigInt(therapistId);
     }
 
     if (status) {
       where.status = status;
     }
 
-    const clients = await this.prismaService.client.findMany({
+    const clients = await this.prismaService.clients.findMany({
       where,
       include: {
-        therapist: {
+        users_clients_therapist_idTousers: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
           },
         },
       },
       orderBy: {
-        createdAt: 'desc',
+        created_at: 'desc',
       },
     }) as unknown as Client[];
 
@@ -124,14 +138,14 @@ export class ClientService {
    * @returns The found client
    */
   async findOne(id: bigint): Promise<Client> {
-    const client = await this.prismaService.client.findUnique({
+    const client = await this.prismaService.clients.findUnique({
       where: { id },
       include: {
-        therapist: {
+        users_clients_therapist_idTousers: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
           },
         },
@@ -139,13 +153,13 @@ export class ClientService {
         waitlist: true,
         appointments: {
           orderBy: {
-            startTime: 'desc',
+            start_time: 'desc',
           },
           take: 5,
         },
         communications: {
           orderBy: {
-            sentAt: 'desc',
+            sent_at: 'desc',
           },
           take: 5,
         },
@@ -176,7 +190,7 @@ export class ClientService {
 
     // Check if updating email and if it already exists
     if (updateClientDto.email) {
-      const existingClient = await this.prismaService.client.findUnique({
+      const existingClient = await this.prismaService.clients.findUnique({
         where: { email: updateClientDto.email },
       }) as unknown as Client | null;
 
@@ -186,25 +200,72 @@ export class ClientService {
     }
 
     // Prepare therapist ID if provided
-    let therapistId: bigint | undefined;
+    let therapist_id: bigint | undefined;
     if (updateClientDto.therapistId) {
-      therapistId = BigInt(updateClientDto.therapistId);
+      therapist_id = BigInt(updateClientDto.therapistId);
     }
 
+    // Prepare update data
+    const updateData: any = {
+      updated_at: new Date()
+    };
+    
+    // Add fields only if they are defined in the DTO
+    if (updateClientDto.firstName !== undefined) {
+      updateData.first_name = updateClientDto.firstName;
+    }
+    
+    if (updateClientDto.lastName !== undefined) {
+      updateData.last_name = updateClientDto.lastName;
+    }
+    
+    if (updateClientDto.email !== undefined) {
+      updateData.email = updateClientDto.email;
+    }
+    
+    if (updateClientDto.phone !== undefined) {
+      updateData.phone = updateClientDto.phone;
+    }
+    
+    if (updateClientDto.address !== undefined) {
+      updateData.address = updateClientDto.address;
+    }
+    
+    if (updateClientDto.status !== undefined) {
+      updateData.status = updateClientDto.status;
+    }
+    
+    if (updateClientDto.priority !== undefined) {
+      updateData.priority = updateClientDto.priority;
+    }
+    
+    if (updateClientDto.notes !== undefined) {
+      updateData.notes = updateClientDto.notes;
+    }
+    
+    // Handle relations separately
+    if (therapist_id) {
+      updateData.users_clients_therapist_idTousers = {
+        connect: { id: therapist_id }
+      };
+    }
+    
+    if (userId) {
+      updateData.users_clients_updated_byTousers = {
+        connect: { id: userId }
+      };
+    }
+    
     // Update the client
-    const updatedClient = await this.prismaService.client.update({
+    const updatedClient = await this.prismaService.clients.update({
       where: { id },
-      data: {
-        ...(updateClientDto as any), // Cast to any to avoid TypeScript errors with therapistId
-        therapistId,
-        updatedBy: userId,
-      },
+      data: updateData,
       include: {
-        therapist: {
+        users_clients_therapist_idTousers: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
           },
         },
@@ -224,14 +285,14 @@ export class ClientService {
     await this.findOne(id);
 
     // Delete the client
-    const deletedClient = await this.prismaService.client.delete({
+    const deletedClient = await this.prismaService.clients.delete({
       where: { id },
       include: {
-        therapist: {
+        users_clients_therapist_idTousers: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
           }
         }
       }
