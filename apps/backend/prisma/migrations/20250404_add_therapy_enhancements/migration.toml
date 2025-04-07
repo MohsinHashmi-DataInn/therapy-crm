@@ -1,5 +1,0 @@
-# This is a manually created migration file to record therapy CRM enhancements
-# It captures all the changes applied via SQL files to your database
-
-migration_name = "20250404_add_therapy_enhancements"
-checksum = "59e9bbd2bec7cced31e70e1807e4f1d81de322ed28363a3ca4e8c5f5c1cbdf00"

@@ -1,442 +1,1295 @@
 # Windsurf Rules
 
-## 1. Code Style & Formatting
+This document defines the **MANDATORY code style, architecture, testing, and process standards** for the therapy-crm project. All contributors (including AI agents) MUST follow these rules without exception to ensure consistency, maintainability, and clarity across the codebase.
 
-### 1.1 Airbnb Style Guide
-- Adhere to the Airbnb JavaScript/TypeScript Style Guide for consistent syntax, imports, and spacing
-- Use **ESLint** and **Prettier** to automatically enforce and format code. Include any NestJS-specific lint rules or overrides as needed
+## Table of Contents
 
-### 1.2 Naming Conventions
-- **React Components**:
-  - **PascalCase** file names (e.g., `UserCard.tsx`)
-  - Export components as **named exports** rather than default exports
-- **Folders & Modules (Front End)**:
-  - Generally **kebab-case** for directory names (`user-profile`, `job-management`)
-  - Utility files in `/lib/` also kebab-case (e.g., `date-utils.ts`) 
-- **NestJS (Back End)**:
-  - **Modules**: e.g., `AuthModule`, `InvoiceModule` (filename `auth.module.ts`, `invoice.module.ts`)
-  - **Services**: e.g., `UserService` (filename `user.service.ts`) 
-  - **Controllers**: e.g., `UserController` (filename `user.controller.ts`)
-  - File names typically in kebab-case, while class names use PascalCase
-- **API Endpoints**:
-  - Use **kebab-case** for all REST API endpoints (e.g., `/api/user-profiles`, `/api/invoice-items`)
-  - For query parameters, use **camelCase** (e.g., `/api/users?sortBy=lastName&filterRole=admin`)
+1. [Scope](#scope)  
+2. [Code Style & Formatting](#code-style--formatting)  
+   - 2.1 [Airbnb Style Guide](#21-airbnb-style-guide)  
+   - 2.2 [Naming Conventions](#22-naming-conventions)  
+   - 2.3 [TypeScript Configuration](#23-typescript-configuration)  
+3. [Project Structure & Architecture](#project-structure--architecture)  
+   - 3.1 [Monorepo Layout](#31-monorepo-layout)  
+   - 3.2 [Frontend – Next.js (App Router)](#32-frontend--nextjs-app-router)  
+   - 3.3 [Backend – NestJS](#33-backend--nestjs)  
+4. [Styling & UI (Front End)](#styling--ui-front-end)  
+   - 4.1 [Tailwind CSS](#41-tailwind-css)  
+   - 4.2 [Shadcn UI / Radix](#42-shadcn-ui--radix)  
+   - 4.3 [Accessibility (a11y)](#43-accessibility-a11y)  
+5. [Data Fetching & Forms (Front End)](#data-fetching--forms-front-end)  
+   - 5.1 [TanStack Query (React Query)](#51-tanstack-query-react-query)  
+   - 5.2 [React Hook Form + Zod](#52-react-hook-form--zod)  
+6. [State Management & Logic (Front End)](#state-management--logic-front-end)  
+7. [NestJS Backend & Database](#nestjs-backend--database)  
+   - 7.1 [Modules](#71-modules)  
+   - 7.2 [Prisma ORM](#72-prisma-orm)  
+   - 7.3 [Security & Auth](#73-security--auth)  
+   - 7.4 [DTOs & Validation](#74-dtos--validation)  
+   - 7.5 [API Design](#75-api-design)  
+   - 7.6 [Error Handling](#76-error-handling)  
+8. [Folder & File Naming](#folder--file-naming)  
+9. [Testing & Quality](#testing--quality)  
+   - 9.1 [Frontend Testing](#91-frontend-testing)  
+   - 9.2 [Backend Testing](#92-backend-testing)  
+   - 9.3 [End-to-End Testing](#93-end-to-end-testing)  
+   - 9.4 [Linting & Formatting](#94-linting--formatting)  
+   - 9.5 [Code Reviews](#95-code-reviews)  
+10. [Environment Variables & Config](#environment-variables--config)  
+11. [Additional Considerations](#additional-considerations)  
+   - 11.1 [Documentation](#111-documentation)  
+   - 11.2 [Performance & Scalability](#112-performance--scalability)  
+   - 11.3 [Logging & Monitoring](#113-logging--monitoring)  
+   - 11.4 [Internationalization (i18n)](#114-internationalization-i18n)
 
-### 1.3 TypeScript
-- Enable **strict** mode (`strict: true`) in `tsconfig.json`
-- Use explicit return types for exported classes, functions, and components
-- Prefer interfaces over types for object definitions when extending/implementing is likely
-- Use enums for fixed sets of related values (e.g., `enum UserRole { ADMIN = 'admin', USER = 'user' }`)
-- Create and use type definitions for all API responses and payloads
+---
 
-## 2. Project Structure & Architecture
+## 1. Scope
 
-We adopt **Next.js 13+ App Router** for the front end and **NestJS** for the back end in a monorepo structure.
+These **Windsurf Rules** MUST be followed in **all** repositories and modules within the therapy-crm project:
 
-### 2.1 Monorepo Layout
+- **Frontend**: Next.js 13+ (App Router) with TypeScript 5.0+
+- **Backend**: NestJS 10+ with TypeScript 5.0+
+- **Database**: PostgreSQL 14+ with Prisma ORM 5+
+- **Common**: Jest/Vitest for testing, dotenv for environment variables, Passport.js for security
+
+These technology versions are REQUIRED and cannot be substituted without explicit approval. The objective is to ensure a **standardized, high-quality codebase** that multiple engineers (including AI agents) can safely contribute to while maintaining consistency.
+
+---
+
+## 2. Code Style & Formatting
+
+### 2.1 Airbnb Style Guide
+1. MUST follow the **Airbnb JavaScript/TypeScript Style Guide** for consistent syntax, imports, and spacing.  
+2. MUST use **ESLint** and **Prettier** with the following exact configuration:
+   ```json
+   // .eslintrc.js
+   module.exports = {
+     extends: [
+       'airbnb',
+       'airbnb-typescript',
+       'plugin:@typescript-eslint/recommended',
+       'plugin:react-hooks/recommended',
+       'prettier'
+     ],
+     parserOptions: {
+       project: './tsconfig.json'
+     },
+     rules: {
+       'react/react-in-jsx-scope': 'off',
+       'react/require-default-props': 'off',
+       'import/prefer-default-export': 'off',
+       '@typescript-eslint/explicit-function-return-type': ['error', { allowExpressions: true }]
+     }
+   };
+   ```
+   ```json
+   // .prettierrc
+   {
+     "semi": true,
+     "singleQuote": true,
+     "tabWidth": 2,
+     "printWidth": 100,
+     "trailingComma": "es5"
+   }
+   ```
+3. MUST set up pre-commit hooks using Husky and lint-staged to enforce these standards.
+
+### 2.2 Naming Conventions
+
+1. **React Components**  
+   - MUST use **PascalCase** for component file names (e.g., `UserCard.tsx`, `AppointmentList.tsx`)
+   - MUST use **named exports** for all components:
+     ```tsx
+     // ✅ CORRECT
+     export function UserCard({ user }: UserCardProps): JSX.Element { ... }
+     
+     // ❌ INCORRECT - DO NOT USE
+     export default function UserCard({ user }: UserCardProps) { ... }
+     ```
+
+2. **Folders & Modules (Front End)**  
+   - MUST use **kebab-case** for all directory names:
+     ```
+     /apps/web/components/user-profile/    ✅ CORRECT
+     /apps/web/components/userProfile/     ❌ INCORRECT
+     ```
+   - MUST use **kebab-case** for all utility files in `/lib/`:
+     ```
+     /apps/web/lib/date-utils.ts           ✅ CORRECT
+     /apps/web/lib/dateUtils.ts            ❌ INCORRECT
+     ```
+
+3. **NestJS (Back End)**  
+   - MUST follow NestJS naming conventions exactly:
+     - Modules: `auth.module.ts` with class name `AuthModule`
+     - Services: `user.service.ts` with class name `UserService`
+     - Controllers: `user.controller.ts` with class name `UserController`
+     - DTOs: `create-user.dto.ts` with class name `CreateUserDto`
+     - Entities: `user.entity.ts` with class name `User`
+     - Guards: `auth.guard.ts` with class name `AuthGuard`
+
+4. **API Endpoints**  
+   - MUST use **kebab-case** for all REST endpoints:
+     ```
+     /api/user-profiles                    ✅ CORRECT
+     /api/userProfiles                     ❌ INCORRECT
+     ```
+   - MUST use **camelCase** for all query parameters:
+     ```
+     /api/users?sortBy=lastName            ✅ CORRECT
+     /api/users?sort_by=last_name          ❌ INCORRECT
+     ```
+
+### 2.3 TypeScript Configuration
+1. MUST use the following `tsconfig.json` configuration:
+   ```json
+   {
+     "compilerOptions": {
+       "target": "es2022",
+       "lib": ["dom", "dom.iterable", "esnext"],
+       "allowJs": true,
+       "skipLibCheck": true,
+       "strict": true,
+       "noImplicitAny": true,
+       "strictNullChecks": true,
+       "forceConsistentCasingInFileNames": true,
+       "noEmit": true,
+       "esModuleInterop": true,
+       "module": "esnext",
+       "moduleResolution": "node",
+       "resolveJsonModule": true,
+       "isolatedModules": true,
+       "jsx": "preserve",
+       "incremental": true,
+       "plugins": [{ "name": "next" }]
+     }
+   }
+   ```
+
+2. MUST add **explicit return types** for all exported functions, classes, and components:
+   ```typescript
+   // ✅ CORRECT
+   export function formatDate(date: Date): string { ... }
+   export class UserService { 
+     async findOne(id: number): Promise<User> { ... } 
+   }
+   export function UserProfile({ user }: UserProfileProps): JSX.Element { ... }
+   
+   // ❌ INCORRECT - DO NOT USE
+   export function formatDate(date: Date) { ... }
+   export class UserService { 
+     async findOne(id: number) { ... } 
+   }
+   export function UserProfile({ user }: UserProfileProps) { ... }
+   ```
+
+3. MUST use **interfaces** for object shapes that might be extended:
+   ```typescript
+   // ✅ CORRECT
+   interface BaseUser {
+     id: number;
+     email: string;
+   }
+   
+   interface AdminUser extends BaseUser {
+     permissions: string[];
+   }
+   
+   // Use type aliases for unions, intersections, or mapped types
+   type UserRole = 'admin' | 'therapist' | 'client';
+   ```
+
+4. MUST use **enums** for fixed sets of related values:
+   ```typescript
+   // ✅ CORRECT
+   enum UserRole {
+     ADMIN = 'admin',
+     THERAPIST = 'therapist',
+     CLIENT = 'client',
+     STAFF = 'staff'
+   }
+   
+   // Then use it consistently
+   function hasAccess(role: UserRole): boolean {
+     return role === UserRole.ADMIN || role === UserRole.STAFF;
+   }
+   ```
+
+5. MUST create shared type definitions for all API contracts:
+   ```typescript
+   // In a shared types file (e.g., /packages/api-types/index.ts)
+   export interface CreateUserRequest {
+     email: string;
+     password: string;
+     firstName: string;
+     lastName: string;
+     role: UserRole;
+   }
+   
+   export interface UserResponse {
+     id: number;
+     email: string;
+     firstName: string;
+     lastName: string;
+     role: UserRole;
+     createdAt: string;
+   }
+   ```
+
+---
+
+## 3. Project Structure & Architecture
+
+### 3.1 Monorepo Layout
+
+The therapy-crm project MUST follow this exact structure:
 
 ```
-/uwho-platform/
+/therapy-crm/
   ├─ /apps/
-  │   ├─ /web/                  # Next.js App Router-based UI (front end)
-  │   │   ├─ /app/              # Next.js /app folder (layouts, routes, etc.)
-  │   │   ├─ /components/       # Shared UI components (presentation-only)
-  │   │   ├─ /contexts/         # React Context providers
-  │   │   ├─ /hooks/            # Custom React Hooks
-  │   │   ├─ /lib/              # Client-side or shared utility logic
-  │   │   ├─ /styles/           # Tailwind & global CSS files
-  │   │   └─ ...other dirs...
-  │   ├─ /backend/              # NestJS application
+  │   ├─ /web/                      # Next.js front end
+  │   │   ├─ /app/                  # Next.js 13+ app router
+  │   │   │   ├─ /api/              # API route handlers
+  │   │   │   ├─ /(auth)/           # Auth-related pages (login, register)
+  │   │   │   ├─ /dashboard/        # Dashboard and protected pages
+  │   │   │   ├─ /layout.tsx        # Root layout with providers
+  │   │   │   └─ /page.tsx          # Home page
+  │   │   ├─ /components/           # UI components organized by domain
+  │   │   │   ├─ /ui/               # Generic UI components
+  │   │   │   ├─ /appointments/     # Appointment-related components
+  │   │   │   ├─ /clients/          # Client-related components
+  │   │   │   ├─ /dashboard/        # Dashboard-specific components
+  │   │   │   └─ /telehealth/       # Telehealth-related components
+  │   │   ├─ /contexts/             # React context providers
+  │   │   │   ├─ auth-provider.tsx  # Authentication context
+  │   │   │   └─ ...                # Other context providers
+  │   │   ├─ /hooks/                # Custom React hooks
+  │   │   │   ├─ use-auth.ts        # Authentication hook
+  │   │   │   ├─ use-appointments.ts # Appointments data hook
+  │   │   │   └─ ...                # Other domain-specific hooks
+  │   │   ├─ /lib/                  # Client-side utilities
+  │   │   │   ├─ api.ts             # API client functions
+  │   │   │   ├─ constants.ts       # App constants
+  │   │   │   ├─ date-utils.ts      # Date manipulation utilities
+  │   │   │   └─ ...                # Other utilities
+  │   │   ├─ /styles/               # Tailwind & global CSS
+  │   │   │   ├─ globals.css        # Global styles
+  │   │   │   └─ ...                # Other style files
+  │   │   ├─ /types/                # TypeScript type definitions
+  │   │   │   ├─ api.ts             # API response/request types
+  │   │   │   ├─ auth.ts            # Auth-related types
+  │   │   │   └─ ...                # Other type definitions
+  │   │   ├─ next.config.js         # Next.js configuration
+  │   │   ├─ tailwind.config.js     # Tailwind configuration
+  │   │   ├─ tsconfig.json          # TypeScript configuration
+  │   │   └─ package.json           # Frontend dependencies
+  │   ├─ /backend/                  # NestJS application
   │   │   ├─ /src/
-  │   │   │   ├─ /modules/
-  │   │   │   │   ├─ user/
+  │   │   │   ├─ /modules/          # Feature modules
+  │   │   │   │   ├─ /user/
   │   │   │   │   │   ├─ user.module.ts
-  │   │   │   │   │   ├─ user.controller.ts
   │   │   │   │   │   ├─ user.service.ts
-  │   │   │   │   │   └─ dtos/entities, etc.
-  │   │   │   ├─ /common/       # Common utilities, interceptors, guards
-  │   │   │   ├─ app.module.ts
-  │   │   │   ├─ main.ts
+  │   │   │   │   │   ├─ user.controller.ts
+  │   │   │   │   │   ├─ /dtos/
+  │   │   │   │   │   │   ├─ create-user.dto.ts
+  │   │   │   │   │   │   └─ update-user.dto.ts
+  │   │   │   │   │   ├─ /entities/
+  │   │   │   │   │   │   └─ user.entity.ts
+  │   │   │   │   │   └─ /tests/
+  │   │   │   │   │       └─ user.service.spec.ts
+  │   │   │   │   ├─ /auth/
+  │   │   │   │   ├─ /appointment/
+  │   │   │   │   ├─ /client/
+  │   │   │   │   └─ /telehealth/
+  │   │   │   ├─ /common/           # Shared utilities, interceptors, guards
+  │   │   │   │   ├─ /decorators/
+  │   │   │   │   ├─ /filters/
+  │   │   │   │   ├─ /guards/
+  │   │   │   │   │   └─ roles.guard.ts
+  │   │   │   │   └─ /interceptors/
+  │   │   │   ├─ app.module.ts      # Root application module
+  │   │   │   ├─ main.ts            # Application entry point
   │   │   │   └─ ...
-  │   │   ├─ /prisma/           # schema.prisma, migrations
+  │   │   ├─ /prisma/               # Prisma ORM
+  │   │   │   ├─ schema.prisma      # Database schema
+  │   │   │   ├─ /migrations/       # Database migrations
+  │   │   │   └─ seed.ts            # Database seeding
+  │   │   ├─ /test/                 # e2e tests
+  │   │   ├─ nest-cli.json          # NestJS configuration
+  │   │   ├─ tsconfig.json          # TypeScript configuration
+  │   │   └─ package.json           # Backend dependencies
+  ├─ /packages/                     # Shared libraries
+  │   ├─ /api-types/                # Shared API type definitions
+  │   │   ├─ index.ts               # Exported type definitions
   │   │   └─ package.json
-  ├─ /packages/
-  │   ├─ /ui/                   # Shared UI library (e.g., extracted Shadcn components)
-  │   ├─ /api/                  # (Optional) Shared API clients or microservices 
-  │   ├─ /config/               # Shared configuration like ESLint, TypeScript, etc.
-  │   └─ /db/                   # (Optional) Prisma schema & migrations if separate
-  ├─ package.json
-  ├─ tsconfig.json
-  └─ ...other files...
+  │   └─ /ui/                       # Shared UI components
+  │       ├─ /components/           # Reusable UI components
+  │       └─ package.json
+  ├─ package.json                   # Root package.json for workspace
+  ├─ turbo.json                     # Turborepo configuration
+  └─ README.md                      # Project documentation
 ```
 
-### 2.2 Front-End: Next.js (App Router)
-- **Server Components by Default**: Convert to client components only where you need state, event handlers, or browser APIs
-- **Data Fetching**: Use [TanStack Query (React Query)](https://tanstack.com/query) for client-side data caching, or Next.js route handlers for server-side logic
-- **Component Structure**:
-  - Follow atomic design principles (atoms, molecules, organisms, templates, pages)
-  - Keep component files under 300 lines; extract larger components into smaller ones
-  - Implement parent-child component relationships with clear prop interfaces
+This structure is MANDATORY and all new files MUST be placed in the appropriate location according to this structure.
 
-### 2.3 Back-End: NestJS
-- **AppModule** as the root; each feature in its own module (`UserModule`, `InvoiceModule`, etc.)
-- **Controllers** handle routing (e.g., `@Controller('users')`), while **Services** handle business logic
-- Integrate **Prisma** for database queries (in `user.service.ts` or separate classes)
-- **Use Dependency Injection**: Inject services rather than instantiating them directly
+### 3.2 Frontend – Next.js (App Router)
 
-## 3. Styling & UI (Front End)
+1. **Server Components by Default**
+   - MUST use React Server Components for all pages and components that don't require client-side interactivity
+   - MUST add `'use client'` directive ONLY when component needs:
+     ```tsx
+     // ✅ CORRECT: Only use 'use client' when needed
+     'use client';
+     
+     import { useState } from 'react';
+     
+     export function InteractiveComponent(): JSX.Element {
+       const [state, setState] = useState(false);
+       // Component with client-side state or event handlers
+     }
+     ```
+   - MUST keep client components as small and focused as possible
 
-### 3.1 Tailwind CSS
-- Configure in `tailwind.config.js`; keep global styles minimal
-- Leverage utility classes for consistent spacing, colors, layout
-- Define custom theme variables for colors, spacing, etc. in theme extension
+2. **Data Fetching**
+   - MUST use Next.js route handlers for server-side operations:
+     ```tsx
+     // app/api/users/route.ts
+     import { NextResponse } from 'next/server';
+     import { getServerSession } from 'next-auth';
+     
+     export async function GET(): Promise<NextResponse> {
+       const session = await getServerSession();
+       if (!session) {
+         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+       }
+       // Fetch data and return response
+     }
+     ```
+   - MUST use TanStack Query v4+ for all client-side data fetching:
+     ```tsx
+     // ✅ CORRECT: Use TanStack Query with proper types and error handling
+     'use client';
+     
+     import { useQuery } from '@tanstack/react-query';
+     import { fetchAppointments } from '@/lib/api';
+     import type { Appointment } from '@/types/api';
+     
+     export function AppointmentList(): JSX.Element {
+       const { data, error, isLoading } = useQuery<Appointment[], Error>({
+         queryKey: ['appointments'],
+         queryFn: fetchAppointments,
+       });
+       
+       if (isLoading) return <LoadingSpinner />;
+       if (error) return <ErrorDisplay error={error} />;
+       return <AppointmentTable appointments={data || []} />;
+     }
+     ```
 
-### 3.2 Shadcn UI
-- Use Shadcn UI components for a consistent design system
-- If customizing or extending them, store shared components in `/packages/ui/` or in `/web/components`
-- Maintain a component library documentation for the team
+3. **Component Architecture**
+   - MUST follow atomic design principles:
+     - **Atoms**: Basic UI elements (Button, Input, Card)
+     - **Molecules**: Combinations of atoms (SearchBar, FormField)
+     - **Organisms**: Complex UI sections (AppointmentForm, ClientList)
+     - **Templates**: Page layouts (DashboardLayout, SettingsLayout)
+     - **Pages**: Complete pages (Dashboard, ClientDetails)
+   - MUST keep component files under 300 lines
+   - MUST extract reusable logic into custom hooks
+   - MUST use TypeScript interfaces for all component props
+     ```tsx
+     // ✅ CORRECT: Define explicit interfaces for props
+     interface UserCardProps {
+       user: User;
+       onEdit?: (userId: number) => void;
+       isSelected?: boolean;
+     }
+     
+     export function UserCard({ user, onEdit, isSelected = false }: UserCardProps): JSX.Element {
+       // Component implementation
+     }
+     ```
 
-### 3.3 Accessibility (a11y)
-- Use semantic HTML elements (`<button>`, `<a>`, `<nav>`, etc.) appropriately
-- Include proper ARIA attributes when necessary 
-- Ensure color contrast meets WCAG 2.1 AA standards (minimum 4.5:1 for normal text)
-- Support keyboard navigation for all interactive elements
-- Test with screen readers periodically
+### 3.3 Backend – NestJS
 
-## 4. Data Fetching & Forms (Front End)
+1. **Module Structure**
+   - MUST have one root `AppModule` that imports all feature modules
+   - MUST create separate modules for each domain feature:
+     ```typescript
+     // ✅ CORRECT: One module per domain feature
+     // user.module.ts
+     @Module({
+       imports: [PrismaModule],
+       controllers: [UserController],
+       providers: [UserService],
+       exports: [UserService],
+     })
+     export class UserModule {}
+     
+     // app.module.ts
+     @Module({
+       imports: [
+         UserModule,
+         AuthModule,
+         AppointmentModule,
+         ClientModule,
+         TelehealthModule,
+       ],
+       controllers: [AppController],
+       providers: [AppService],
+     })
+     export class AppModule {}
+     ```
 
-### 4.1 TanStack Query (React Query)
-- For all client-side data fetching and mutations
-- Keep query keys consistent, e.g. `['job', jobId]`
-- Implement proper error handling and loading states
-- Set up global query client defaults for retries, caching
+2. **Controllers**
+   - MUST handle HTTP routing with appropriate decorators:
+     ```typescript
+     // ✅ CORRECT: Controller with proper decorators and error handling
+     @Controller('users')
+     export class UserController {
+       constructor(private readonly userService: UserService) {}
+       
+       @Get()
+       @UseGuards(JwtAuthGuard, RolesGuard)
+       @Roles(UserRole.ADMIN, UserRole.STAFF)
+       async findAll(): Promise<UserResponseDto[]> {
+         try {
+           return await this.userService.findAll();
+         } catch (error) {
+           this.logger.error(`Failed to get users: ${error.message}`, error.stack);
+           throw new InternalServerErrorException('Failed to retrieve users');
+         }
+       }
+       
+       @Get(':id')
+       @UseGuards(JwtAuthGuard)
+       async findOne(@Param('id', ParseIntPipe) id: number): Promise<UserResponseDto> {
+         try {
+           const user = await this.userService.findOne(id);
+           if (!user) {
+             throw new NotFoundException(`User with ID ${id} not found`);
+           }
+           return user;
+         } catch (error) {
+           if (error instanceof NotFoundException) {
+             throw error;
+           }
+           this.logger.error(`Failed to get user ${id}: ${error.message}`, error.stack);
+           throw new InternalServerErrorException(`Failed to retrieve user ${id}`);
+         }
+       }
+     }
+     ```
 
-### 4.2 React Hook Form
-- Manage form state and submission
-- Combine with **Zod** for validation via `zodResolver`
-- Create reusable form components for common patterns (e.g., address inputs, payment forms)
+3. **Services**
+   - MUST implement business logic and data access:
+     ```typescript
+     // ✅ CORRECT: Service with proper error handling and typing
+     @Injectable()
+     export class UserService {
+       private readonly logger = new Logger(UserService.name);
+       
+       constructor(private readonly prisma: PrismaService) {}
+       
+       async findAll(): Promise<UserResponseDto[]> {
+         try {
+           const users = await this.prisma.user.findMany();
+           return users.map(user => this.mapToDto(user));
+         } catch (error) {
+           this.logger.error(`Database error: ${error.message}`, error.stack);
+           throw new InternalServerErrorException('Database error occurred');
+         }
+       }
+       
+       async findOne(id: number): Promise<UserResponseDto | null> {
+         try {
+           const user = await this.prisma.user.findUnique({
+             where: { id },
+           });
+           
+           if (!user) return null;
+           return this.mapToDto(user);
+         } catch (error) {
+           this.logger.error(`Database error: ${error.message}`, error.stack);
+           throw new InternalServerErrorException('Database error occurred');
+         }
+       }
+       
+       private mapToDto(user: User): UserResponseDto {
+         const { password, ...userWithoutPassword } = user;
+         return userWithoutPassword as UserResponseDto;
+       }
+     }
+     ```
 
-### 4.3 Zod
-- Define schemas for form validation and shape your data
-- Consider reusing these schemas or NestJS DTO validations to keep front-end and back-end validations aligned
-- Export and share validation schemas between frontend and backend when possible
+4. **Dependency Injection**
+   - MUST use constructor injection for all dependencies:
+     ```typescript
+     // ✅ CORRECT: Constructor injection
+     @Injectable()
+     export class AuthService {
+       constructor(
+         private readonly userService: UserService,
+         private readonly jwtService: JwtService,
+         private readonly configService: ConfigService,
+       ) {}
+     }
+     
+     // ❌ INCORRECT - DO NOT USE: Direct instantiation
+     @Injectable()
+     export class BadAuthService {
+       private userService = new UserService(new PrismaService());
+     }
+     ```
+   - MUST register all providers in their respective modules
 
-## 5. State Management & Logic (Front End)
-- **React Context** for global or cross-cutting state (e.g., user session, theme)
-- Keep context minimal; for heavier data logic, rely on React Query or custom hooks
-- Create custom hooks for repeated logic patterns (`useUser`, `useInvoices`, etc.)
-- Consider using Zustand for complex state that doesn't fit the React Query model
+---
 
-## 6. NestJS Backend & Database
+## 4. Styling & UI (Front End)
 
-### 6.1 Modules
-- Each feature domain in its own module (`UserModule`, `AuthModule`)
-- Shared or cross-cutting logic in `CommonModule` or `/common`
-- Follow Single Responsibility Principle in services and controllers
+### 4.1 Tailwind CSS
+- Configure in `tailwind.config.js`; keep global CSS minimal.  
+- Use utility classes for consistent spacing, colors, and typography.  
+- Leverage custom theme variables or design tokens if needed.
 
-### 6.2 Prisma
-- Keep `schema.prisma` and migrations in `/prisma/` directory
-- Use [nestjs-prisma](https://github.com/notiz-dev/nestjs-prisma) or a custom provider to inject Prisma client into services
-- Create a transaction helper service for operations that span multiple database calls
+### 4.2 Shadcn UI / Radix
+- **Shadcn UI** components + **Radix** primitives for accessible, high-quality UI.  
+- If customizing heavily, put shared components in `/packages/ui/` or `/apps/web/components/`.  
+- Maintain a component documentation page or a "storybook" style library if possible.
 
-### 6.3 Security & Auth
-- Use NestJS Auth Guards (`@UseGuards(JwtAuthGuard)`) and Passport strategies (JWT, Local, etc.)
-- Store secrets in environment variables (`.env`), never commit them
-- Implement rate limiting for authentication endpoints
-- Use CSRF protection for forms and cookie-based authentication
-- Set appropriate secure, httpOnly cookies and proper CORS configuration
+### 4.3 Accessibility (a11y)
+- Use semantic elements: `<button>`, `<nav>`, `<footer>`.  
+- Ensure color contrast meets **WCAG 2.1 AA** (4.5:1).  
+- Implement keyboard navigation for all interactive components.  
+- Provide ARIA attributes where applicable.
 
-### 6.4 DTOs
-- For request validation, use class-validator or Zod with NestJS
-- Keep them in each module directory (e.g., `/user/dtos/create-user.dto.ts`)
-- Create separate DTOs for request input and response output
+---
 
-### 6.5 API Design
-- Follow REST principles for CRUD operations
-- Use proper HTTP status codes (200, 201, 400, 401, 403, 404, 500)
-- Implement consistent error response format
-- Version your API (e.g., `/api/v1/users`) when breaking changes are needed
-- Document APIs with Swagger/OpenAPI using NestJS decorators
+## 5. Data Fetching & Forms (Front End)
 
-### 6.6 Error Handling
-- Create a centralized error handling strategy using NestJS exception filters
-- Log all errors with appropriate logging levels
-- Return consistent error response formats to the client
-- Hide implementation details in production error messages
+### 5.1 TanStack Query (React Query)
+- For all data fetching and mutations.  
+- Use consistent **query keys** (e.g., `['user', userId]`).  
+- Implement **error boundaries** and **loading states** for good UX.  
+- Configure global defaults for caching, retry logic, etc.
 
-## 7. Folder & File Naming
+### 5.2 React Hook Form + Zod
+- Manage form states with **React Hook Form**.  
+- Validate inputs using **Zod** schemas via `zodResolver`.  
+- Keep form components modular (e.g., `FormInput`, `FormSelect`) for reusability.  
+- If front and back end share the same schemas, store them in a shared library or reuse them in NestJS DTOs where possible.
 
-### 7.1 Front End
-- **`/app/route/page.tsx`** for server or client components
-- **`/components/UserCard.tsx`** (PascalCase)
-- **`/hooks/useUser.ts`** (camelCase with `use` prefix)
-- Group related components in subdirectories when they grow in number
+---
 
-### 7.2 Back End
-- **`/src/app.module.ts`**: root module
-- **`/src/modules/user/user.module.ts`**: feature module in kebab-case
-- **`/src/modules/user/user.service.ts`**, **`/src/modules/user/user.controller.ts`**
-- Group related entities, DTOs, and interfaces within feature modules
+## 6. State Management & Logic (Front End)
+1. **React Context** for truly global states (e.g., theme, user session).  
+2. **TanStack Query** for remote data and caching.  
+3. **Custom Hooks** (`useUsers`, `useAppointments`) for domain-specific logic.  
+4. **Redux or Zustand** only if you have local state that doesn't fit React Query or context (e.g., complex offline logic, large ephemeral data sets).
 
-## 8. Testing & Quality
+---
 
-### 8.1 Frontend Testing
-- Use Jest or Vitest with React Testing Library for unit tests
-- Place test files near components (e.g., `UserCard.test.tsx`)
-- Write tests for critical user flows and complex business logic
-- Aim for minimum 70% code coverage for critical paths
+## 7. NestJS Backend & Database
 
-### 8.2 Backend Testing
-- Use Jest for NestJS unit/integration tests
-- Test files can follow the `.spec.ts` or `.test.ts` convention (e.g., `user.service.spec.ts`)
-- Use test databases for integration tests, not production databases
-- Mock external services and databases when appropriate
+### 7.1 Modules
+- Each feature domain in a dedicated module: `AuthModule`, `ClientModule`, `AppointmentModule`, etc.  
+- **CommonModule** or `/common/` folder for shared interceptors, guards, and custom decorators.  
+- Keep each module's controllers, services, and DTOs organized together.
 
-### 8.3 End-to-End Testing
-- Consider Cypress or Playwright for integrated tests across front-end + back-end flows
-- Implement key user journeys as E2E tests
-- Run E2E tests in CI/CD pipeline for critical paths
+### 7.2 Prisma ORM
+- **schema.prisma** in `/prisma/`, plus migrations in `/prisma/migrations`.  
+- Use a **PrismaService** class to inject the Prisma client where needed (`@Injectable()` in NestJS).  
+- Run `npx prisma migrate dev` for local dev migrations; ensure you track schema changes in version control.
 
-### 8.4 Linting & Formatting
-- **ESLint + Prettier** in CI. No merges if lint/format fails
-- Set up pre-commit hooks with Husky and lint-staged
-- Add custom rules for project-specific conventions
+### 7.3 Security & Auth
 
-### 8.5 Code Reviews
-- Require at least one approval before merging
-- Use pull request templates with checklists for common issues
-- Focus on maintainability, readability, and potential bugs
+#### 7.3.1 Authentication
+- MUST implement JWT-based authentication using NestJS Passport:
+  ```typescript
+  // ✅ CORRECT: JWT Strategy implementation
+  @Injectable()
+  export class JwtStrategy extends PassportStrategy(Strategy) {
+    constructor(
+      private readonly configService: ConfigService,
+      private readonly userService: UserService,
+    ) {
+      super({
+        jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+        ignoreExpiration: false,
+        secretOrKey: configService.get<string>('JWT_SECRET'),
+      });
+    }
 
-## 9. Environment Variables & Config
+    async validate(payload: JwtPayload): Promise<User> {
+      const user = await this.userService.findOne(payload.sub);
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+      return user;
+    }
+  }
+  ```
+- MUST protect routes with appropriate guards:
+  ```typescript
+  // ✅ CORRECT: Route protection
+  @Controller('appointments')
+  export class AppointmentController {
+    @Get()
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.THERAPIST)
+    async findAll(): Promise<AppointmentDto[]> {
+      // Implementation
+    }
+  }
+  ```
+- MUST implement proper token refresh mechanism with secure HTTP-only cookies
+- MUST enforce password complexity requirements:
+  - Minimum 10 characters
+  - At least one uppercase letter
+  - At least one lowercase letter
+  - At least one number
+  - At least one special character
 
-### 9.1 .env Files
-- `.env.local` or `.env` in `/apps/web` for front-end environment (only non-secret)
-- `.env` in `/apps/backend` for secrets like DB connection, JWT keys
-- Keep `.env.example` for placeholders, never commit real secrets
-- Use separate `.env` files for different environments (`.env.development`, `.env.test`, `.env.production`)
+#### 7.3.2 Authorization
+- MUST implement role-based access control (RBAC) with the following roles:
+  ```typescript
+  // ✅ CORRECT: User roles enum
+  export enum UserRole {
+    ADMIN = 'admin',
+    THERAPIST = 'therapist',
+    STAFF = 'staff',
+    CLIENT = 'client',
+  }
+  ```
+- MUST create a RolesGuard to enforce role-based access:
+  ```typescript
+  // ✅ CORRECT: RolesGuard implementation
+  @Injectable()
+  export class RolesGuard implements CanActivate {
+    constructor(private reflector: Reflector) {}
 
-### 9.2 Runtime Configuration
-- In Next.js, keep secrets server-side only (server components or route handlers)
-- For NestJS, read from `process.env` via a config module or library
-- Validate environment variables at startup to fail fast if required variables are missing
+    canActivate(context: ExecutionContext): boolean {
+      const requiredRoles = this.reflector.getAllAndOverride<UserRole[]>('roles', [
+        context.getHandler(),
+        context.getClass(),
+      ]);
 
-## 10. Additional Considerations
+      if (!requiredRoles) {
+        return true;
+      }
 
-### 10.1 Documentation
-- Provide a top-level `README.md` or docs folder explaining how to install, run migrations, and start both front-end and back-end
-- Document environment variables, scripts, and architectural decisions
-- Include diagrams for complex workflows and data models
-- Add comments for complex logic (why, not what)
+      const { user } = context.switchToHttp().getRequest();
+      return requiredRoles.some((role) => user.roles?.includes(role));
+    }
+  }
+  ```
+- MUST implement resource-based authorization for user-specific data
 
-### 10.2 CI/CD
-- Use GitHub Actions or similar to run tests, lint, and build
-- Automate deployment:
-  - **Front End** → Vercel or Netlify
-  - **NestJS** → AWS, DigitalOcean, or any container-based deployment
-- Implement branch protection rules for main/production branches
+#### 7.3.3 Security Best Practices
+- MUST store all secrets in environment variables (`.env`):
+  ```
+  # ✅ CORRECT: Environment variables
+  DATABASE_URL="postgresql://user:password@localhost:5432/therapy_crm?schema=public"
+  JWT_SECRET="your-secure-jwt-secret-key"
+  JWT_EXPIRATION="1h"
+  REFRESH_TOKEN_SECRET="your-secure-refresh-token-secret"
+  REFRESH_TOKEN_EXPIRATION="7d"
+  ```
+- MUST NEVER commit `.env` files to version control (add to `.gitignore`)
+- MUST implement rate limiting for authentication endpoints:
+  ```typescript
+  // ✅ CORRECT: Rate limiting implementation
+  import { Module } from '@nestjs/common';
+  import { ThrottlerModule } from '@nestjs/throttler';
+  
+  @Module({
+    imports: [
+      ThrottlerModule.forRoot({
+        ttl: 60,          // Time window in seconds
+        limit: 5,         // Max requests per time window
+      }),
+    ],
+  })
+  export class AppModule {}
+  ```
 
-### 10.3 Performance & Scalability
-- NestJS can use **Fastify** under the hood instead of Express if you need higher concurrency
-- For front-end, consider Next.js features like [Incremental Static Regeneration (ISR)](https://nextjs.org/docs/pages/building-your-application/data-fetching/incremental-static-regeneration) or serverless route handlers
-- Implement caching strategies for frequently accessed data
-- Use pagination for large data sets
-- Optimize assets (images, JS, CSS) for production builds
+### 7.4 DTOs & Validation
+- Keep request and response DTOs in `dtos/` subfolders.  
+- Separate **input DTOs** from **output** if they differ significantly.
 
-### 10.4 Future AI/ML Integration
-- If advanced AI/ML tasks arise (invoice OCR, cost predictions), consider a separate Python microservice
-- Keep NestJS as the main orchestrator, calling external AI endpoints
-- Define clear interfaces for AI service integration
+### 7.5 API Design
 
-### 10.5 Logging & Monitoring
-- Implement structured logging with context (user ID, request ID)
-- Use appropriate log levels (debug, info, warn, error)
-- Set up error monitoring with Sentry or similar
-- Add health check endpoints for backend services
+#### 7.5.1 RESTful Endpoints
+- MUST follow REST principles for all API endpoints:
+  ```typescript
+  // ✅ CORRECT: RESTful controller implementation
+  @Controller('clients')
+  export class ClientController {
+    constructor(private readonly clientService: ClientService) {}
+    
+    @Get()
+    findAll(): Promise<ClientDto[]> { /* ... */ }
+    
+    @Get(':id')
+    findOne(@Param('id', ParseIntPipe) id: number): Promise<ClientDto> { /* ... */ }
+    
+    @Post()
+    create(@Body() createClientDto: CreateClientDto): Promise<ClientDto> { /* ... */ }
+    
+    @Patch(':id')
+    update(
+      @Param('id', ParseIntPipe) id: number,
+      @Body() updateClientDto: UpdateClientDto,
+    ): Promise<ClientDto> { /* ... */ }
+    
+    @Delete(':id')
+    remove(@Param('id', ParseIntPipe) id: number): Promise<void> { /* ... */ }
+  }
+  ```
 
-### 10.6 Internationalization (i18n)
-- Use Next.js internationalization features for multi-language support
-- Keep translations in separate files organized by language code
-- Use ICU message format for complex pluralization/formatting
-- Consider right-to-left (RTL) support in UI components
+- MUST use the following HTTP methods correctly:
+  - `GET`: Retrieve resources (never modify data)
+  - `POST`: Create new resources
+  - `PUT`: Replace entire resources
+  - `PATCH`: Partially update resources
+  - `DELETE`: Remove resources
 
-### 10.7 Git Workflow
-- Follow the GitHub Flow or GitFlow branching model
-- Use consistent branch naming (feature/, bugfix/, hotfix/)
-- Write descriptive commit messages with conventional commits format
-- Squash commits before merging to maintain a clean history
+- MUST use kebab-case for all API endpoint paths:
+  ```
+  ✅ CORRECT: /api/client-sessions
+  ❌ INCORRECT: /api/clientSessions
+  ```
 
-## 11. Database Standards & PostgreSQL
+#### 7.5.2 HTTP Status Codes
+- MUST use appropriate HTTP status codes:
+  - `200 OK`: Successful request
+  - `201 Created`: Resource successfully created
+  - `204 No Content`: Successful request with no response body
+  - `400 Bad Request`: Invalid request format or parameters
+  - `401 Unauthorized`: Missing or invalid authentication
+  - `403 Forbidden`: Authenticated but not authorized
+  - `404 Not Found`: Resource not found
+  - `409 Conflict`: Request conflicts with current state
+  - `422 Unprocessable Entity`: Validation errors
+  - `500 Internal Server Error`: Server-side error
 
-### 11.1 Naming Conventions & Structure
-- **Tables**: Use **snake_case** for table names (e.g., `user_profiles`, `purchase_orders`)
-- **Columns**: Also **snake_case** for columns (e.g., `created_at`, `updated_by`)
-- **Primary Keys**: Prefer `BIGSERIAL` (or `SERIAL` if space isn't a concern) for surrogate keys named `id`
-- **Foreign Keys**: Use references with `_id` suffix (e.g., `user_id`, `job_id`)
-- **Constraints**: Keep check constraints, uniqueness, and referential integrity well-defined (e.g., `UNIQUE(email)`, `CHECK (quantity >= 0)`)
-- **Views**: Prefix view names with `v_` to distinguish them from tables (e.g., `v_active_users`)
+#### 7.5.3 Response Formats
+- MUST use consistent response formats for all endpoints:
+  ```typescript
+  // ✅ CORRECT: Success response format
+  interface SuccessResponse<T> {
+    data: T;
+    meta?: {
+      pagination?: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    };
+  }
+  
+  // ✅ CORRECT: Error response format
+  interface ErrorResponse {
+    statusCode: number;
+    message: string;
+    errors?: Record<string, string[]>;
+    timestamp: string;
+    path: string;
+  }
+  ```
 
-### 11.2 Schema Organization
-- Keep everything in a single schema (`public`) for smaller apps, or multiple schemas for large projects with clear domain boundaries
-- If you must separate domains (e.g., "auth" vs. "billing"), use distinct schemas with consistent naming: `auth.user`, `billing.invoice`
-- Consider a separate `audit` schema for audit tables if implementing custom audit logging
+- MUST implement pagination for all list endpoints:
+  ```typescript
+  @Get()
+  async findAll(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ): Promise<SuccessResponse<ClientDto[]>> {
+    const [data, total] = await this.clientService.findAll(page, limit);
+    
+    return {
+      data,
+      meta: {
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
+    };
+  }
+  ```
 
-### 11.3 Audit Columns
-- **Standard Columns**:
-  1. `created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()`
-  2. `updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()`
-  3. `created_by BIGINT` referencing a `users(id)` or similar
-  4. `updated_by BIGINT` referencing a `users(id)` or similar
-- **Update Triggers**: Consider a `BEFORE UPDATE` trigger to automatically set `updated_at = now()` (and `updated_by` if your app tracks the current user ID in the DB layer)
-- For **soft deletes**, add `deleted_at` and/or `deleted_by` columns if your application requires historical data retention
+#### 7.5.4 API Documentation
+- MUST use Swagger/OpenAPI decorators for all API endpoints:
+  ```typescript
+  @ApiTags('clients')
+  @Controller('clients')
+  export class ClientController {
+    @Get()
+    @ApiOperation({ summary: 'Get all clients' })
+    @ApiQuery({ name: 'page', required: false, type: Number })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
+    @ApiResponse({ status: 200, description: 'List of clients', type: [ClientDto] })
+    @ApiResponse({ status: 401, description: 'Unauthorized' })
+    findAll(): Promise<ClientDto[]> { /* ... */ }
+    
+    @Post()
+    @ApiOperation({ summary: 'Create a new client' })
+    @ApiBody({ type: CreateClientDto })
+    @ApiResponse({ status: 201, description: 'Client created', type: ClientDto })
+    @ApiResponse({ status: 400, description: 'Bad request' })
+    create(@Body() createClientDto: CreateClientDto): Promise<ClientDto> { /* ... */ }
+  }
+  ```
 
-### 11.4 Role-Based Access Control (RBAC)
-- **Postgres Roles**:
-  - **app_user**: Standard application user with minimal permissions (SELECT/INSERT/UPDATE/DELETE on specific tables)
-  - **app_admin**: Elevated privileges for migrations, schema changes (but not superuser)
-  - **read_only**: Optional role if you need read-only connections (e.g., for analytics or reporting)
-- **Least Privilege**:
-  - Only grant each role the permissions it needs (e.g., `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES ... TO app_user`)
-  - For advanced security, combine row-level security (RLS) with policies that filter data by user ID or tenant
+- MUST configure Swagger in the main.ts file:
+  ```typescript
+  async function bootstrap() {
+    const app = await NestFactory.create(AppModule);
+    
+    const config = new DocumentBuilder()
+      .setTitle('Therapy CRM API')
+      .setDescription('API documentation for the Therapy CRM system')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+      
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+    
+    await app.listen(3000);
+  }
+  ```
 
-### 11.5 Avoiding Duplication
-- **Existing Structures**:
-  - Before creating new tables or columns, **check existing** ones for potential overlap
-  - Maintain an **ER diagram** or schema documentation so new additions don't recreate columns or tables with overlapping meanings
-- **Uniqueness & Normalization**:
-  - Use unique indexes or constraints where appropriate (e.g., `UNIQUE(email)` for user emails)
-  - Normalize data to avoid storing repeated info (3NF or a pragmatic approach)
-- **Common Tables**:
-  - Create reusable lookup tables for common entities like status types, categories, etc.
+- MUST keep API documentation up-to-date with all code changes
 
-### 11.6 Lookup Tables & Address Data
-- **Country/State/City**:
-  - If you need standardized US/Canada addresses, consider dedicated tables like `countries`, `states`, `cities` with official codes and names
-  - For US states, store official abbreviations (e.g., `CA` for California). For Canadian provinces, e.g. `NS` for Nova Scotia
-- **Address Columns**:
-  - A typical address structure: `address_line1`, `address_line2`, `city`, `region` (state/province), `postal_code`, `country`
-  - Validate postal codes or rely on your application/AI layer to confirm validity
-- **Consistency**:
-  - Always store addresses in a standardized format, ensuring the region code matches the `countries` or `states` table if referencing them
+### 7.6 Error Handling
 
-### 11.7 Data Types & Performance
-- Use `NUMERIC(12,2)` or `MONEY` for currency values if you handle billing amounts. `NUMERIC` is often safer to avoid locale formatting issues
-- For large text fields, use `TEXT`; for short strings (e.g., state codes), use `VARCHAR(2)`
-- Index frequently queried columns (especially foreign keys, email columns, etc.)
-- Consider partial indexes or advanced features (GIN indexes for JSONB fields) if needed
-- Use appropriate types for UUID fields (`uuid` type rather than `VARCHAR`)
-- Store dates and times with timezone awareness when relevant (`TIMESTAMP WITH TIME ZONE`)
+#### 7.6.1 Exception Filters
+- MUST implement a global exception filter to handle all errors consistently:
+  ```typescript
+  // ✅ CORRECT: Global exception filter
+  @Catch()
+  export class GlobalExceptionFilter implements ExceptionFilter {
+    private readonly logger = new Logger(GlobalExceptionFilter.name);
 
-### 11.8 Migrations & Versioning
-- **Prisma**: Use `prisma migrate` to create incremental migrations in your `/prisma/migrations` folder
-- **Change Review**:
-  - Always review auto-generated migrations for duplicates or unintended column renames—**especially** if AI tools generate them
-  - Merge or remove extraneous migrations so your history is clean and consistent
-- **Database Version Control**:
-  - Track schema changes in version control
-  - Test migrations on staging before applying to production
-  - Plan for rollback procedures for critical migrations
+    constructor(private readonly configService: ConfigService) {}
 
-### 11.9 Additional PostgreSQL Best Practices
-- **Use Transactions**: Wrap multi-step write operations in transactions to maintain consistency
-- **Connection Pooling**: Rely on a pool manager (e.g., `pg-pool`) or Prisma's built-in pooling config
-- **Backup & Restore**: Set up scheduled backups. For production, regularly verify restore procedures
-- **Monitoring**: Keep an eye on logs (`pg_stat_statements`) for slow queries or potential indexes you might need
-- **Query Optimization**:
-  - Use `EXPLAIN ANALYZE` to identify slow queries
-  - Create indexes for frequently filtered and sorted columns
-  - Consider materialized views for complex, frequently-accessed reports# Professional Application Standards
+    catch(exception: unknown, host: ArgumentsHost): void {
+      const ctx = host.switchToHttp();
+      const response = ctx.getResponse<Response>();
+      const request = ctx.getRequest<Request>();
+      const isProduction = this.configService.get('NODE_ENV') === 'production';
 
-## 12. UI/UX Architecture Guidelines
+      let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
+      let message = 'Internal server error';
+      let errors: Record<string, string[]> | undefined;
 
-### 12.1 Page Structure & Navigation
-- **Header Component**:
-  - Consistent header across all pages with:
-    - Logo positioning (left-aligned) linking to home
-    - Primary navigation links
-    - User profile dropdown with avatar (top-right)
-    - Quick action buttons appropriate for user role
-  - Implement responsive collapse for mobile view
-- **Footer Component**:
-  - Legal links (Privacy Policy, Terms of Service)
-  - Copyright information
-  - Contact or support links
-- **Navigation**:
-  - Left sidebar for primary navigation (collapsible)
-  - Group navigation items logically
-  - Breadcrumbs for deep navigation paths
-  - Persistent "back" button for multi-step forms
-- **Responsive Behavior**:
-  - Desktop-first design with mobile adaptations
-  - Breakpoints aligned with standard frameworks (sm, md, lg, xl, 2xl)
-  - Critical actions accessible on all screen sizes
+      // Handle specific exception types
+      if (exception instanceof HttpException) {
+        statusCode = exception.getStatus();
+        const exceptionResponse = exception.getResponse() as any;
+        
+        if (typeof exceptionResponse === 'object') {
+          message = exceptionResponse.message || message;
+          errors = exceptionResponse.errors;
+        } else {
+          message = exceptionResponse || message;
+        }
+      } else if (exception instanceof PrismaClientKnownRequestError) {
+        // Handle Prisma-specific errors
+        statusCode = HttpStatus.BAD_REQUEST;
+        message = this.handlePrismaError(exception);
+      }
 
-### 12.2 Design System Extensions
-- **Component Library**:
-  - Extend existing UI libraries with custom components
-  - Maintain a component showcase or documentation for developers
-- **Dark Mode Support**:
-  - Implement with persistent user preference
-  - Ensure all components support dark mode variants
-- **Loading States**:
-  - Consistent indicators (spinners, skeletons)
-  - Apply loading states using appropriate UI strategies
-- **Consistency**:
-  - Follow defined spacing and color systems
-  - Semantic use of primary and destructive actions
+      // Log the full error details for debugging
+      this.logger.error(
+        `${request.method} ${request.url} - ${statusCode}: ${message}`,
+        exception instanceof Error ? exception.stack : undefined,
+      );
 
-## 13. Authentication & Security Framework
+      // Return a sanitized response to the client
+      response.status(statusCode).json({
+        statusCode,
+        message,
+        errors: isProduction ? undefined : errors, // Only include detailed errors in non-production
+        timestamp: new Date().toISOString(),
+        path: request.url,
+      });
+    }
 
-### 13.1 Authentication Architecture
-- **Login Flow**:
-  - Standard email/username and password authentication
-  - "Remember me" option with secure handling
-  - Account lockout after multiple failed attempts
-  - Clear error messaging for failed login
-- **Password Management**:
-  - Strong password enforcement (minimum length, complexity)
-  - Secure password reset with time-limited tokens
-  - Periodic password update reminders for privileged accounts
-- **Multi-Factor Authentication (MFA)**:
-  - Optional MFA via authenticator apps
-  - Mandatory for admin-level accounts
-  - Backup recovery codes
+    private handlePrismaError(error: PrismaClientKnownRequestError): string {
+      switch (error.code) {
+        case 'P2002':
+          return `Unique constraint failed on field: ${error.meta?.target}`;
+        case 'P2025':
+          return 'Record not found';
+        default:
+          return 'Database error occurred';
+      }
+    }
+  }
+  ```
+
+- MUST register the exception filter in the main.ts file:
+  ```typescript
+  async function bootstrap() {
+    const app = await NestFactory.create(AppModule);
+    app.useGlobalFilters(app.get(GlobalExceptionFilter));
+    // ... other configuration
+    await app.listen(3000);
+  }
+  ```
+
+#### 7.6.2 Custom Exceptions
+- MUST create domain-specific exceptions for business logic errors:
+  ```typescript
+  // ✅ CORRECT: Custom domain exception
+  export class AppointmentConflictException extends HttpException {
+    constructor(message = 'Appointment time conflicts with an existing appointment') {
+      super(message, HttpStatus.CONFLICT);
+    }
+  }
+  
+  export class InsufficientPermissionException extends HttpException {
+    constructor(resource: string) {
+      super(`You don't have permission to access this ${resource}`, HttpStatus.FORBIDDEN);
+    }
+  }
+  ```
+
+- MUST use custom exceptions in services to provide clear error context:
+  ```typescript
+  // ✅ CORRECT: Using custom exceptions in services
+  @Injectable()
+  export class AppointmentService {
+    async createAppointment(createAppointmentDto: CreateAppointmentDto): Promise<AppointmentDto> {
+      try {
+        // Check for conflicts
+        const existingAppointment = await this.prisma.appointment.findFirst({
+          where: {
+            therapistId: createAppointmentDto.therapistId,
+            startTime: { lte: createAppointmentDto.endTime },
+            endTime: { gte: createAppointmentDto.startTime },
+          },
+        });
+
+        if (existingAppointment) {
+          throw new AppointmentConflictException(
+            `Therapist already has an appointment from ${existingAppointment.startTime} to ${existingAppointment.endTime}`,
+          );
+        }
+
+        // Create appointment if no conflicts
+        return this.prisma.appointment.create({
+          data: createAppointmentDto,
+        });
+      } catch (error) {
+        if (error instanceof AppointmentConflictException) {
+          throw error; // Re-throw domain exceptions
+        }
+        this.logger.error(`Failed to create appointment: ${error.message}`, error.stack);
+        throw new InternalServerErrorException('Failed to create appointment');
+      }
+    }
+  }
+  ```
+
+#### 7.6.3 Logging
+- MUST use NestJS Logger for all error logging:
+  ```typescript
+  // ✅ CORRECT: Proper error logging
+  @Injectable()
+  export class UserService {
+    private readonly logger = new Logger(UserService.name);
+    
+    async findOne(id: number): Promise<UserDto | null> {
+      try {
+        return await this.prisma.user.findUnique({ where: { id } });
+      } catch (error) {
+        this.logger.error(
+          `Error retrieving user with ID ${id}: ${error.message}`,
+          error.stack,
+        );
+        throw new InternalServerErrorException('Failed to retrieve user');
+      }
+    }
+  }
+  ```
+
+- MUST configure a centralized logging system in production:
+  - Use Winston or Pino for structured logging
+  - Include request IDs in logs for traceability
+  - Log sensitive operations for audit purposes
+
+#### 7.6.4 Client-Side Error Handling
+- MUST implement proper error handling in all API calls from the frontend:
+  ```typescript
+  // ✅ CORRECT: Frontend error handling with React Query
+  const { data, error, isLoading } = useQuery<ClientDto[], ErrorResponse>({
+    queryKey: ['clients'],
+    queryFn: async () => {
+      try {
+        const response = await fetch('/api/clients');
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to fetch clients');
+        }
+        
+        return response.json();
+      } catch (error) {
+        console.error('Error fetching clients:', error);
+        throw error;
+      }
+    },
+  });
+  
+  // Display appropriate UI based on error state
+  if (error) {
+    return <ErrorDisplay message={error.message} />;
+  }
+  ```
+
+---
+
+## 8. Folder & File Naming
+- **Front End**  
+  - `page.tsx` or `layout.tsx` for Next.js route files.  
+  - **PascalCase** for component files: `UserCard.tsx`.  
+  - **kebab-case** for directories: `client-profile/`, `appointment-management/`.  
+- **Back End**  
+  - `user.module.ts`, `user.controller.ts`, `user.service.ts` in `/modules/user/`.  
+  - Keep related entities, DTOs, guards in the same module folder.  
+  - If a module grows large, subfolders for `dtos/`, `entities/`, `services/`, etc.
+
+---
+
+## 9. Testing & Quality
+
+### 9.1 Frontend Testing
+
+#### 9.1.1 Unit Tests
+- MUST write unit tests for ALL services, controllers, and complex components
+- MUST use Jest as the testing framework for both frontend and backend
+- MUST follow the AAA (Arrange-Act-Assert) pattern in all test cases:
+  ```typescript
+  // ✅ CORRECT: Following AAA pattern
+  describe('UserService', () => {
+    let userService: UserService;
+    let prismaService: PrismaService;
+    
+    beforeEach(() => {
+      // Arrange
+      prismaService = mock<PrismaService>();
+      userService = new UserService(prismaService);
+    });
+    
+    describe('findOne', () => {
+      it('should return a user when given a valid ID', async () => {
+        // Arrange
+        const mockUser = { id: 1, name: 'John Doe', email: 'john@example.com' };
+        prismaService.user.findUnique.mockResolvedValue(mockUser);
+        
+        // Act
+        const result = await userService.findOne(1);
+        
+        // Assert
+        expect(result).toEqual(mockUser);
+        expect(prismaService.user.findUnique).toHaveBeenCalledWith({
+          where: { id: 1 },
+        });
+      });
+      
+      it('should return null when user not found', async () => {
+        // Arrange
+        prismaService.user.findUnique.mockResolvedValue(null);
+        
+        // Act
+        const result = await userService.findOne(999);
+        
+        // Assert
+        expect(result).toBeNull();
+      });
+      
+      it('should throw an exception when database error occurs', async () => {
+        // Arrange
+        prismaService.user.findUnique.mockRejectedValue(new Error('DB error'));
+        
+        // Act & Assert
+        await expect(userService.findOne(1)).rejects.toThrow(InternalServerErrorException);
+      });
+    });
+  });
+  ```
+- MUST test error handling and edge cases for all functions
+- MUST use proper mocking for external dependencies
+
+#### 9.1.2 Integration Tests
+- MUST write integration tests for ALL API endpoints
+- MUST test both successful and error scenarios for each endpoint
+- MUST use realistic data and test database interactions
+- MUST include tests for authentication and authorization
+  ```typescript
+  // ✅ CORRECT: Integration test for API endpoint
+  describe('Users API (e2e)', () => {
+    let app: INestApplication;
+    let prisma: PrismaService;
+    let authToken: string;
+    
+    beforeAll(async () => {
+      const moduleFixture = await Test.createTestingModule({
+        imports: [AppModule],
+      }).compile();
+      
+      app = moduleFixture.createNestApplication();
+      prisma = app.get<PrismaService>(PrismaService);
+      await app.init();
+      
+      // Get auth token for protected routes
+      const loginResponse = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'admin@example.com', password: 'password123' });
+        
+      authToken = loginResponse.body.accessToken;
+    });
+    
+    afterAll(async () => {
+      await prisma.$disconnect();
+      await app.close();
+    });
+    
+    describe('GET /users', () => {
+      it('should return 401 if not authenticated', async () => {
+        return request(app.getHttpServer())
+          .get('/users')
+          .expect(401);
+      });
+      
+      it('should return users when authenticated', async () => {
+        return request(app.getHttpServer())
+          .get('/users')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200)
+          .then(response => {
+            expect(Array.isArray(response.body)).toBe(true);
+          });
+      });
+    });
+  });
+  ```
+
+#### 9.1.3 End-to-End Tests
+- MUST use Cypress for critical user flows
+- MUST test the following flows at minimum:
+  - User registration and login
+  - Creating and managing appointments
+  - Client management operations
+  - Telehealth session initiation
+- MUST test across different viewport sizes (desktop, tablet, mobile)
+  ```typescript
+  // ✅ CORRECT: Cypress E2E test for login flow
+  describe('Authentication Flow', () => {
+    beforeEach(() => {
+      cy.visit('/');
+    });
+    
+    it('should allow a user to log in', () => {
+      // Navigate to login page
+      cy.contains('Login').click();
+      
+      // Fill in credentials
+      cy.get('input[name="email"]').type('test@example.com');
+      cy.get('input[name="password"]').type('password123');
+      
+      // Submit form
+      cy.get('button[type="submit"]').click();
+      
+      // Verify successful login
+      cy.url().should('include', '/dashboard');
+      cy.contains('Welcome').should('be.visible');
+    });
+    
+    it('should show error for invalid credentials', () => {
+      cy.contains('Login').click();
+      cy.get('input[name="email"]').type('test@example.com');
+      cy.get('input[name="password"]').type('wrongpassword');
+      cy.get('button[type="submit"]').click();
+      
+      cy.contains('Invalid credentials').should('be.visible');
+      cy.url().should('include', '/login');
+    });
+  });
+  ```
+
+#### 9.1.4 Coverage Requirements
+- MUST achieve minimum 80% code coverage for ALL backend business logic
+- MUST achieve minimum 70% code coverage for frontend components
+- MUST configure Jest to enforce coverage thresholds:
+  ```javascript
+  // jest.config.js
+  module.exports = {
+    // ... other config
+    coverageThreshold: {
+      global: {
+        branches: 80,
+        functions: 80,
+        lines: 80,
+        statements: 80,
+      },
+    },
+  };
+  ```
+- MUST include coverage reports in CI/CD pipeline
+- MUST fail builds that don't meet coverage requirements
+
+### 9.2 Linting & Formatting
+- **ESLint + Prettier** enforced in CI.
+- **ESLint + Prettier** enforced in CI.  
+- Prefer pre-commit hooks with **Husky** + **lint-staged** so no code merges if lint/format fail.
+
+### 9.5 Code Reviews
+- Require at least **one approval** before merging to main or develop branches.  
+- Use Pull Request templates with checklists (tests, docs, any migrations required?).  
+- Focus on maintainability, security, and potential edge cases during review.
+
+---
+
+## 10. Environment Variables & Config
+- **Front End**: `.env.local` or `.env.development.local` for local dev environment (only non-sensitive data).  
+- **Back End**: `.env.local` containing secrets (JWT keys, DB credentials).  
+- **Never** commit real secrets; provide `.env.local.example` for placeholders.  
+- Validate environment variables at startup for required keys.
+
+---
+
+## 11. Additional Considerations
+
+### 11.1 Documentation
+- Provide a top-level `README.md` or a `docs/` folder with:  
+  - Installation & setup steps  
+  - Database migration instructions  
+  - Architecture diagrams if needed  
 
 
-## 14. User Profile & Management
+### 11.2 Performance & Scalability
+- For the **frontend**:  
+  - Use Next.js route handlers or serverless for dynamic endpoints.  
+  - Optimize images and static assets.  
+- For the **backend**:  
+  - Scale NestJS horizontally if needed (Docker/Kubernetes).  
+  - Use caching for frequent queries.  
+  - Implement pagination on large dataset queries.
 
-### 14.1 User Profile
-- **Profile Information**:
-  - Basic fields: name, email, phone, profile picture
-  - Preferences: notifications, language, accessibility
-- **Profile Management**:
-  - Self-service updates for non-sensitive fields
-  - Approval workflow for critical updates
-  - Profile completeness indicator
+### 11.3 Logging & Monitoring
+- Use **NestJS Logger** or a library like Pino for structured logs.  
+- Integrate an error-monitoring service (e.g., Sentry) to capture unhandled exceptions.  
+- Expose a `/health` endpoint for readiness/liveness checks.
 
-### 14.2 User Administration
-- **User Management**:
-  - Admin portal for user creation and management
-  - Batch operations support
-  - Filtering and searching capabilities
-  - User audit history
-- **User Lifecycle**:
-  - Invitation-based onboarding
-  - Suspension and deletion workflows
-  - Automated deactivation for prolonged inactivity
-  - Data archiving policies
-
-## 15. Notification System
-
-### 15.1 Notification Architecture
-- **Notification Types**:
-  - System alerts
-  - User-specific notifications
-  - Administrative alerts
-- **Delivery Channels**:
-  - In-app notifications
-  - Email notifications
-  - Optional SMS for critical alerts
-- **Notification Management**:
-  - User-configurable preferences
-  - Do-not-disturb options
-  - Compliance with communication regulations
+### 11.4 Internationalization (i18n)
+- **Next.js i18n** for multiple languages in the UI.  
+- Store translations in `locales/`.  
+- For the backend, consider message localization or storing localized content in the DB.
